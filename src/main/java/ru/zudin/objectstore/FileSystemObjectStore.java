@@ -1,15 +1,11 @@
 package ru.zudin.objectstore;
 
-import org.apache.commons.codec.Charsets;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang.SerializationUtils;
-import org.apache.commons.lang.StringUtils;
 
 import java.io.*;
 import java.util.*;
 import java.util.regex.Pattern;
-
-import static org.apache.commons.lang.StringUtils.isNotBlank;
 
 /**
  * @author sergey

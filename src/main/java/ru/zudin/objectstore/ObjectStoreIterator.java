@@ -1,6 +1,5 @@
 package ru.zudin.objectstore;
 
-
 import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
@@ -9,8 +8,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.Optional;
-
 
 /**
  * @author sergey
