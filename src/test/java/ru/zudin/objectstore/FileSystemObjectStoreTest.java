@@ -2,10 +2,10 @@ package ru.zudin.objectstore;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.File;
 import java.util.*;
 
 import static org.junit.Assert.*;
@@ -20,16 +20,13 @@ public class FileSystemObjectStoreTest {
 
     @Before
     public void setUp() throws Exception {
-        String path = System.getProperty("user.dir");
-        if (!path.endsWith("/")) {
-            path += "/";
-        }
-        path += "files/";
-        File filesPath = new File(path);
-        if (!filesPath.exists()) {
-            filesPath.mkdir();
-        }
-        store = new FileSystemObjectStore(path); //temp
+        String path = FileSystemObjectStoreSpeedTest.getOrCreatePath();
+        store = new FileSystemObjectStore(path);
+    }
+
+    @After
+    public void close() throws Exception {
+        store.close();
     }
 
     @Test

@@ -15,7 +15,7 @@ import java.util.Optional;
  * @author sergey
  * @since 08.05.18
  */
-public class ObjectStoreIterator implements Iterator {
+class BatchIterator implements Iterator {
 
     private static final String DIVISOR = " ";
 
@@ -27,7 +27,7 @@ public class ObjectStoreIterator implements Iterator {
     private String value;
     private Optional<Boolean> hasNext;
 
-    public ObjectStoreIterator(File store) {
+    public BatchIterator(File store) {
         this.store = store;
         this.randomAccessFile = null;
         this.seek = -1;
@@ -44,6 +44,7 @@ public class ObjectStoreIterator implements Iterator {
             }
             boolean iterate = iterate();
             hasNext = Optional.of(iterate);
+            //todo: close file?
             return iterate;
         } catch (IOException e) {
             throw new IllegalStateException("Cannot read file '" + store.getPath() + "");
