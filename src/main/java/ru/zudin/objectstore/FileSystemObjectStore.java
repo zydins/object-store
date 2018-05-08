@@ -18,14 +18,19 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
 
     private final String folder;
     private final int initBatchSize;
-    private Map<String, Batch> index;
+    private Map<String, Position> index;
     private List<Batch> batches;
+    private boolean autoDefragmentation;
 
     public FileSystemObjectStore(String folder) {
         this(folder, 4);
     }
 
     public FileSystemObjectStore(String folder, int initBatchSize) {
+        this(folder, initBatchSize, true);
+    }
+
+    public FileSystemObjectStore(String folder, int initBatchSize, boolean autoDefragmentation) {
         //todo: check batch size
         if (!folder.endsWith("/")) {
             folder += "/";
@@ -34,9 +39,10 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         this.index = new HashMap<>();
         this.batches = new ArrayList<>();
         this.initBatchSize = initBatchSize;
+        this.autoDefragmentation = autoDefragmentation;
     }
 
-    private void lazyInit() {
+    private void lazyInit() throws IOException {
         if (batches.isEmpty()) {
             scan();
             createBatches();
@@ -56,9 +62,9 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
 //        times[i++] = System.currentTimeMillis();
         Batch batch = getBatch(guid);
 //        times[i++] = System.currentTimeMillis();
-        batch.write(guid, serializedValue);
+        long pos = batch.write(guid, serializedValue);
 //        times[i++] = System.currentTimeMillis();
-        index.put(guid, batch);
+        index.put(guid, new Position(batch, pos));
 //        times[i++] = System.currentTimeMillis();
 //        StringBuilder builder = new StringBuilder();
 //        for (int j = 1; j < times.length; j++) {
@@ -71,52 +77,95 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     @Override
     public Optional<Object> get(String guid) throws IOException {
         lazyInit();
-        Batch batch = index.get(guid);
-        if (batch == null) {
+        Position position = index.get(guid);
+        if (position == null) {
             return Optional.empty();
         }
+        Batch batch = position.getBatch();
+        Batch.BatchIterator iterator = null;
         try {
-            Batch.BatchIterator iterator = batch.createIterator();
+            iterator = batch.createIterator();
+            iterator.setStartPos(position.getPos());
             while (iterator.hasNext()) {
                 String savedGuid = iterator.next();
                 if (guid.equals(savedGuid)) {
                     String value = iterator.currentValue();
+                    iterator.close();
                     return Optional.of(decodeValue(value));
                 }
             }
+            //wrong behaviour: guid in index, but not in file
+            index.remove(guid);
+            return Optional.empty();
         } catch (IllegalStateException e) {
             throw new IOException(e);
+        } finally {
+            if (iterator != null) {
+                iterator.close();
+            }
         }
-        //wrong behaviour: guid in index, but not in file
-        index.remove(guid);
-        return Optional.empty();
     }
 
     @Override
-    public void delete(String guid) {
+    public void delete(String guid) throws IOException {
         lazyInit();
-        Batch batch = index.get(guid);
-        if (batch != null) {
+        Position position = index.get(guid);
+        if (position != null) {
+            Batch batch = position.getBatch();
             Batch.BatchIterator iterator = batch.createIterator();
+            iterator.setStartPos(position.getPos());
             while (iterator.hasNext()) {
                 String savedGuid = iterator.next();
                 if (guid.equals(savedGuid)) {
                     iterator.remove();
+                    index.remove(guid);
                     break;
+                }
+            }
+            iterator.close();
+            defragmentIfNeeded(batch);
+        }
+    }
+
+    private void defragmentIfNeeded(Batch batch) throws IOException {
+        if (autoDefragmentation) {
+            Optional<Map<String, Long>> optMap = batch.defragmentIfNeeded();
+            if (optMap.isPresent()) {
+                Map<String, Long> map = optMap.get();
+                for (String guid : map.keySet()) {
+                    Position position = index.get(guid);
+                    Long newPos = map.get(guid);
+                    if (position == null) {
+                        //wrong behaviour: object in file but not in index
+                        index.put(guid, new Position(batch, newPos));
+                    } else {
+                        position.setPos(newPos);
+                    }
                 }
             }
         }
     }
 
+    public boolean isAutoDefragmentation() {
+        return autoDefragmentation;
+    }
+
+    public void setAutoDefragmentation(boolean autoDefragmentation) {
+        this.autoDefragmentation = autoDefragmentation;
+    }
+
     @Override
-    public void delete(Collection<String> guids) {
+    public void delete(Collection<String> guids) throws IOException {
         lazyInit();
         Map<Batch, Set<String>> grouped = guids.stream()
                 .distinct()
                 .filter(index::containsKey)
-                .collect(Collectors.groupingBy(index::get, Collectors.toSet()));
+                .collect(Collectors.groupingBy(g -> index.get(g).getBatch(), Collectors.toSet()));
         for (Batch batch : grouped.keySet()) {
-            batch.delete(grouped.get(batch));
+            Set<String> toDelete = grouped.get(batch);
+            batch.delete(toDelete);
+            toDelete.forEach(index::remove);
+            defragmentIfNeeded(batch);
         }
     }
 
@@ -162,7 +211,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         return batches.get(Math.abs(guid.hashCode()) % batches.size());
     }
 
-    private boolean scan() {
+    private boolean scan() throws IOException {
         File[] files = getFiles();
         if (files.length == 0) {
             return false;
@@ -199,11 +248,35 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         }
     }
 
-    private void fillIndex(Batch batch) {
+    private void fillIndex(Batch batch) throws IOException {
         Batch.BatchIterator iterator = batch.createIterator();
         while (iterator.hasNext()) {
             String guid = iterator.next();
-            index.put(guid, batch);
+            long pos = iterator.getPos();
+            index.put(guid, new Position(batch, pos));
+        }
+        iterator.close();
+    }
+
+    private class Position {
+        private Batch batch;
+        private long pos;
+
+        public Position(Batch batch, long pos) {
+            this.batch = batch;
+            this.pos = pos;
+        }
+
+        public Batch getBatch() {
+            return batch;
+        }
+
+        public long getPos() {
+            return pos;
+        }
+
+        public void setPos(long pos) {
+            this.pos = pos;
         }
     }
 }

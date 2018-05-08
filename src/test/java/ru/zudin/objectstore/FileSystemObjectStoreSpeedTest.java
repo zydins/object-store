@@ -6,6 +6,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * @author Sergey Zudin
@@ -46,20 +49,91 @@ public class FileSystemObjectStoreSpeedTest {
         long avgSpeed = 0;
         CircularFifoQueue<Long> last = new CircularFifoQueue<>(100);
         String str = "This is simple string, put me";
-        for (int i = 0; i < 10000; i++) {
+        for (int i = 1; i <= 10000; i++) {
             long start = System.currentTimeMillis();
             store.put(str);
             long elapsed = System.currentTimeMillis() - start;
             last.add(elapsed);
             avgSpeed = (avgSpeed * count + elapsed) / ++count;
-            if (i > 0 && i % 100 == 0 || i < 100 && i % 10 == 0) {
-                System.out.println("Count: "+count+", Avg. time: " + avgSpeed);
+            if (i > 0 && i % 1000 == 0 || i <= 100 && i % 10 == 0) {
                 long lastHun = 0;
                 for (Long el : last) {
                     lastHun += el;
                 }
                 lastHun /= last.size();
-                System.out.println("Count: "+count+", Avg. time of last "+last.size()+": " + lastHun);
+                System.out.println(String.format("Count: %d: avg. time total=%d; avg. time of last %d=%d",
+                        count, avgSpeed, last.size(), lastHun));
+            }
+        }
+    }
+
+    @Test
+    public void test2RemoveNoDefragmentation() throws Exception {
+        store.clear();
+        store.setAutoDefragmentation(false);
+        try {
+            int count = 0;
+            long avgSpeed = 0;
+            CircularFifoQueue<Long> last = new CircularFifoQueue<>(100);
+            String str = "This is simple string, put me";
+            List<String> guids = new ArrayList<>();
+            for (int i = 1; i <= 10000; i++) {
+                String guid = store.put(str);
+                if (i % 10 == 0) {
+                    guids.add(guid);
+                }
+            }
+            Collections.shuffle(guids);
+            for (int i = 1; i <= guids.size(); i++) {
+                String guid = guids.get(i - 1);
+                long start = System.currentTimeMillis();
+                store.delete(guid);
+                long elapsed = System.currentTimeMillis() - start;
+                last.add(elapsed);
+                avgSpeed = (avgSpeed * count + elapsed) / ++count;
+                if (i > 0 && i % 100 == 0 || i < 100 && i % 10 == 0) {
+                    long lastHun = 0;
+                    for (Long el : last) {
+                        lastHun += el;
+                    }
+                    lastHun /= last.size();
+                    System.out.println(String.format("Count: %d: avg. time total=%d Avg. time of last %d=%d", count, avgSpeed, last.size(), lastHun));
+                }
+            }
+        } finally {
+            store.setAutoDefragmentation(true);
+        }
+    }
+
+    @Test
+    public void test3RemoveDefragmentation() throws Exception {
+        store.clear();
+        int count = 0;
+        long avgSpeed = 0;
+        CircularFifoQueue<Long> last = new CircularFifoQueue<>(100);
+        String str = "This is simple string, put me";
+        List<String> guids = new ArrayList<>();
+        for (int i = 1; i <= 50000; i++) {
+            String guid = store.put(str);
+            if (Math.random() <= 0.4) {
+                guids.add(guid);
+            }
+        }
+        Collections.shuffle(guids);
+        for (int i = 1; i <= guids.size(); i++) {
+            String guid = guids.get(i - 1);
+            long start = System.currentTimeMillis();
+            store.delete(guid);
+            long elapsed = System.currentTimeMillis() - start;
+            last.add(elapsed);
+            avgSpeed = (avgSpeed * count + elapsed) / ++count;
+            if (i > 0 && i % 1000 == 0 || i < 100 && i % 10 == 0) {
+                long lastHun = 0;
+                for (Long el : last) {
+                    lastHun += el;
+                }
+                lastHun /= last.size();
+                System.out.println(String.format("Count: %d: avg. time total=%d Avg. time of last %d=%d", count, avgSpeed, last.size(), lastHun));
             }
         }
     }

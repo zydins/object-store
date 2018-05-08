@@ -16,7 +16,7 @@ public interface AppendOnlyObjectStore {
 
     Optional<Object> get(String guid) throws FileNotFoundException, IOException;
 
-    void delete(String guid);
+    void delete(String guid) throws IOException;
 
-    void delete(Collection<String> guids);
+    void delete(Collection<String> guids) throws IOException;
 }

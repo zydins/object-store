@@ -147,32 +147,62 @@ public class FileSystemObjectStoreTest {
     @Test
     public void test7Defragment() throws Exception {
         store.clear();
-        List<Batch> batches = store.getBatches();
-        System.out.println("### Before insert ###");
-        for (Batch batch : batches) {
-            System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+        store.setAutoDefragmentation(false);
+        try {
+            List<Batch> batches = store.getBatches();
+            System.out.println("### Before insert ###");
+            for (Batch batch : batches) {
+                System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+            }
+            List<String> toDelete = new ArrayList<>();
+            for (int i = 0; i < 1000; i++) {
+                String value = "Hello wonkies " + i;
+                String guid = store.put(value);
+                if (i % 4 == 0) {
+                    toDelete.add(guid);
+                }
+            }
+            System.out.println("### After insert ###");
+            for (Batch batch : batches) {
+                System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+            }
+            store.delete(toDelete);
+            System.out.println("### After delete ###");
+            for (Batch batch : batches) {
+                long oldSize = batch.fileSize();
+                batch.defragment();
+                long newSize = batch.fileSize();
+                System.out.println(String.format("Batch %s, size after logical delete: %d, size after file delete: %d",
+                        batch.getName(), oldSize, newSize));
+                assertTrue(newSize < oldSize);
+            }
+        } finally {
+            store.setAutoDefragmentation(true);
         }
+    }
+
+    @Test
+    public void test8DefragmentGet() throws Exception {
+        store.clear();
         List<String> toDelete = new ArrayList<>();
+        List<String> existing = new ArrayList<>();
         for (int i = 0; i < 1000; i++) {
             String value = "Hello wonkies " + i;
             String guid = store.put(value);
-            if (i % 4 == 0) {
+            if (Math.random() <= 0.6) {
                 toDelete.add(guid);
+            } else {
+                existing.add(guid);
             }
         }
-        System.out.println("### After insert ###");
-        for (Batch batch : batches) {
-            System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+        for (String guid : existing) {
+            Optional<Object> optional = store.get(guid);
+            assertTrue(optional.isPresent());
         }
         store.delete(toDelete);
-        System.out.println("### After delete ###");
-        for (Batch batch : batches) {
-            long oldSize = batch.fileSize();
-            batch.defragment();
-            long newSize = batch.fileSize();
-            System.out.println(String.format("Batch %s, size after logical delete: %d, size after file delete: %d",
-                    batch.getName(), oldSize, newSize));
-            assertTrue(newSize < oldSize);
+        for (String guid : existing) {
+            Optional<Object> optional = store.get(guid);
+            assertTrue(optional.isPresent());
         }
     }
 
