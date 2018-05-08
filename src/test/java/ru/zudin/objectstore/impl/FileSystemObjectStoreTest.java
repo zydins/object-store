@@ -1,10 +1,12 @@
-package ru.zudin.objectstore;
+package ru.zudin.objectstore.impl;
+
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import ru.zudin.objectstore.Batch;
 
 import java.util.*;
 

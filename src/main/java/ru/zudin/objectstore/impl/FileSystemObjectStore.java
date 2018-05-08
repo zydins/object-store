@@ -1,7 +1,10 @@
-package ru.zudin.objectstore;
+package ru.zudin.objectstore.impl;
 
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang.SerializationUtils;
+import ru.zudin.objectstore.AppendOnlyObjectStore;
+import ru.zudin.objectstore.Batch;
+import ru.zudin.objectstore.BatchIterator;
 
 import java.io.Closeable;
 import java.io.File;
@@ -57,10 +60,9 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     public String put(Serializable object) throws IOException {
         lazyInit();
         String guid = generateGuid();
-        //todo: big files?
-        String serializedValue = encodeValue(object);
+        byte[] bytes = SerializationUtils.serialize(object);
         Batch batch = getBatch(guid);
-        long pos = batch.write(guid, serializedValue);
+        long pos = batch.write(guid, bytes);
         index.put(guid, new Position(batch, pos));
         rebalanceIfNeeded(batch);
         return guid;
@@ -81,11 +83,11 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
             while (i < oldies.size() && j < created.size()) {
                 Batch from = oldies.get(i);
                 Batch to = created.get(j);
-                Batch.BatchIterator fromIterator = from.createIterator();
+                BatchIterator fromIterator = from.createIterator();
                 while (fromIterator.hasNext() && from.validSize() > averageSize && to.validSize() <= averageSize) {
                     String guid = fromIterator.next();
-                    String value = fromIterator.getValue();
-                    long newPos = to.write(guid, value);
+                    byte[] bytes = fromIterator.value();
+                    long newPos = to.write(guid, bytes);
                     index.put(guid, new Position(to, newPos));
                     fromIterator.remove();
                 }
@@ -111,28 +113,11 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
             return Optional.empty();
         }
         Batch batch = position.getBatch();
-        Batch.BatchIterator iterator = null;
-        try {
-            iterator = batch.createIterator();
-            iterator.setStartPos(position.getPos());
-            while (iterator.hasNext()) {
-                String savedGuid = iterator.next();
-                if (guid.equals(savedGuid)) {
-                    String value = iterator.getValue();
-                    iterator.close();
-                    return Optional.of(decodeValue(value));
-                }
-            }
-            System.out.println(String.format("Wrong behaviour: guid #%s in index, but not in file (%s)", guid, batch.getName()));
-            index.remove(guid);
+        Optional<byte[]> optional = batch.get(position.getPos());
+        if (!optional.isPresent()) {
             return Optional.empty();
-        } catch (IllegalStateException e) {
-            throw new IOException(e);
-        } finally {
-            if (iterator != null) {
-                iterator.close();
-            }
         }
+        return Optional.of(SerializationUtils.deserialize(optional.get()));
     }
 
     @Override
@@ -141,17 +126,8 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         Position position = index.get(guid);
         if (position != null) {
             Batch batch = position.getBatch();
-            Batch.BatchIterator iterator = batch.createIterator();
-            iterator.setStartPos(position.getPos());
-            while (iterator.hasNext()) {
-                String savedGuid = iterator.next();
-                if (guid.equals(savedGuid)) {
-                    iterator.remove();
-                    index.remove(guid);
-                    break;
-                }
-            }
-            iterator.close();
+            batch.delete(position.getPos());
+            index.remove(guid);
             defragmentIfNeeded(batch);
         }
     }
@@ -238,7 +214,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
             return false;
         } else {
             for (File file : files) {
-                Batch batch = new Batch(folder, file.getName(), sizeLoadFactor, fileSizeThreshold);
+                Base64Batch batch = new Base64Batch(folder, file.getName(), sizeLoadFactor, fileSizeThreshold);
                 Map<String, Long> defragment = batch.defragment();
                 for (String guid : defragment.keySet()) {
                     index.put(guid, new Position(batch, defragment.get(guid)));
@@ -264,7 +240,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         while (batches.size() < batchSize) {
             Batch batch;
             while (true) {
-                batch = new Batch(folder, "batch-" + i++ + ".fsos", sizeLoadFactor, fileSizeThreshold);
+                batch = new Base64Batch(folder, "batch-" + i++ + ".fsos", sizeLoadFactor, fileSizeThreshold);
                 if (!batches.contains(batch)) {
                     break;
                 }

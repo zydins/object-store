@@ -1,4 +1,4 @@
-package ru.zudin.objectstore;
+package ru.zudin.objectstore.impl;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.junit.After;
