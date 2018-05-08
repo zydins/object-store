@@ -147,37 +147,32 @@ public class FileSystemObjectStoreTest {
     @Test
     public void test7Defragment() throws Exception {
         store.clear();
-        store.setAutoDefragmentation(false);
-        try {
-            List<Batch> batches = store.getBatches();
-            System.out.println("### Before insert ###");
-            for (Batch batch : batches) {
-                System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+        List<Batch> batches = store.getBatches();
+        System.out.println("### Before insert ###");
+        for (Batch batch : batches) {
+            System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+        }
+        List<String> toDelete = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            String value = "Hello wonkies " + i;
+            String guid = store.put(value);
+            if (i % 4 == 0) {
+                toDelete.add(guid);
             }
-            List<String> toDelete = new ArrayList<>();
-            for (int i = 0; i < 1000; i++) {
-                String value = "Hello wonkies " + i;
-                String guid = store.put(value);
-                if (i % 4 == 0) {
-                    toDelete.add(guid);
-                }
-            }
-            System.out.println("### After insert ###");
-            for (Batch batch : batches) {
-                System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
-            }
-            store.delete(toDelete);
-            System.out.println("### After delete ###");
-            for (Batch batch : batches) {
-                long oldSize = batch.fileSize();
-                batch.defragment();
-                long newSize = batch.fileSize();
-                System.out.println(String.format("Batch %s, size after logical delete: %d, size after file delete: %d",
-                        batch.getName(), oldSize, newSize));
-                assertTrue(newSize < oldSize);
-            }
-        } finally {
-            store.setAutoDefragmentation(true);
+        }
+        System.out.println("### After insert ###");
+        for (Batch batch : batches) {
+            System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+        }
+        store.delete(toDelete);
+        System.out.println("### After delete ###");
+        for (Batch batch : batches) {
+            long oldSize = batch.fileSize();
+            batch.defragment();
+            long newSize = batch.fileSize();
+            System.out.println(String.format("Batch %s, size after logical delete: %d, size after file delete: %d",
+                    batch.getName(), oldSize, newSize));
+            assertTrue(newSize < oldSize);
         }
     }
 
@@ -203,6 +198,32 @@ public class FileSystemObjectStoreTest {
         for (String guid : existing) {
             Optional<Object> optional = store.get(guid);
             assertTrue(optional.isPresent());
+        }
+    }
+
+    @Test
+    public void test9PutThreshold() throws Exception {
+        FileSystemObjectStore store = new FileSystemObjectStore(FileSystemObjectStoreSpeedTest.getOrCreatePath(), 4,
+                0.33, 1024 * 1024 * 1);
+        try {
+            store.clear();
+            int initSize = store.getBatches().size();
+            Map<String, String> guids = new HashMap<>();
+            String str = "Put me in store, please! I'm ";
+            for (int i = 1; i < 50000; i++) {
+                String put = str + i;
+                String guid = store.put(put);
+                guids.put(guid, put);
+            }
+            int newSize = store.getBatches().size();
+            assertTrue(newSize > initSize);
+            for (String guid : guids.keySet()) {
+                Optional<Object> optional = store.get(guid);
+                assertTrue(optional.isPresent());
+                assertEquals(guids.get(guid), optional.get());
+            }
+        } finally {
+            store.close();
         }
     }
 

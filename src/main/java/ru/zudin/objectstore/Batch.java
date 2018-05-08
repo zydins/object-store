@@ -14,16 +14,22 @@ class Batch implements Closeable {
 
     private final String path;
     private final String name;
+    private final File file;
+    private final double sizeLoadFactor;
+    private final long fileSizeThreshold;
     private PrintWriter printWriter;
     private int removedNumber;
     private int removedSize;
 
-    public Batch(String path, String name) {
+    public Batch(String path, String name, double sizeLoadFactor, long fileSizeThreshold) {
         this.path = path;
         this.name = name;
+        this.fileSizeThreshold = fileSizeThreshold;
+        this.file = new File(path + name);
         this.printWriter = null;
         this.removedNumber = 0;
         this.removedSize = 0;
+        this.sizeLoadFactor = sizeLoadFactor;
     }
 
     public String getName() {
@@ -61,12 +67,15 @@ class Batch implements Closeable {
     }
 
     public BatchIterator createIterator() {
-        return new BatchIterator(getFile());
+        return new BatchIterator();
     }
 
     protected long fileSize() {
-        File file = getFile();
         return file.length();
+    }
+
+    protected long validSize() {
+        return file.length() - removedSize;
     }
 
     public Optional<Map<String, Long>> defragmentIfNeeded() throws IOException {
@@ -80,15 +89,16 @@ class Batch implements Closeable {
     private boolean isDefragmentationNeeded() {
         double fileSize = (double) fileSize();
         double proportion = removedSize / fileSize;
-        if (proportion < 0.33) {
-            double avgSize = removedSize / (double) removedNumber; //todo: not correct
-            double totalNumber = fileSize / avgSize; //todo: if total size is small - ignore?
-            return removedNumber / totalNumber >= 0.33;
-        }
-        return true;
+        return proportion >= sizeLoadFactor || (fileSize > fileSizeThreshold && removedSize != 0);
+//        if (proportion < sizeLoadFactor) {
+//            double avgSize = removedSize / (double) removedNumber; //todo: correct?
+//            double totalNumber = fileSize / avgSize; //todo: if total size is small - ignore?
+//            return removedNumber / totalNumber >= 0.33;
+//        }
+//        return true;
     }
 
-    public Map<String, Long> defragment() throws IOException {
+    protected Map<String, Long> defragment() throws IOException {
         System.out.println("Defragmentation start for " + name);
         long start = System.currentTimeMillis();
         Map<String, Long> positions = new HashMap<>();
@@ -98,17 +108,18 @@ class Batch implements Closeable {
         while (oldIterator.hasNext()) {
             long pos = newFile.length();
             String guid = oldIterator.next();
-            String value = oldIterator.currentValue();
+            String value = oldIterator.getValue();
             write(clearWriter, guid, value);
             positions.put(guid, pos);
         }
-        File oldFile = getFile();
-        File tempOld = new File(oldFile.getPath() + ".old");
-        oldFile.renameTo(tempOld);
-        newFile.renameTo(oldFile);
+        File tempOld = new File(file.getPath() + ".old");
+        file.renameTo(tempOld);
+        newFile.renameTo(file);
         tempOld.delete();
-        printWriter.close();
-        printWriter = null;
+        if (printWriter != null) {
+            printWriter.close();
+            printWriter = null;
+        }
         removedNumber = 0;
         removedSize = 0;
         long elapsed = System.currentTimeMillis() - start;
@@ -139,7 +150,6 @@ class Batch implements Closeable {
     }
 
     private PrintWriter createPrintWriter() throws IOException {
-        File file = getFile();
         if (!file.exists()) {
             if (!file.createNewFile()) {
                 throw new IOException("Cannot create file '" + name + "'");
@@ -148,14 +158,9 @@ class Batch implements Closeable {
         return new PrintWriter(new FileOutputStream(file, true));
     }
 
-    private File getFile() {
-        return new File(path + name);
-    }
-
     public class BatchIterator implements Iterator, Closeable {
         private static final String DIVISOR = " ";
 
-        private final File store;
         private RandomAccessFile randomAccessFile;
         private String guid;
         private int seek;
@@ -163,8 +168,7 @@ class Batch implements Closeable {
         private String value;
         private Optional<Boolean> hasNext;
 
-        public BatchIterator(File store) {
-            this.store = store;
+        public BatchIterator() {
             this.randomAccessFile = null;
             this.seek = -1;
             this.guid = null;
@@ -182,7 +186,7 @@ class Batch implements Closeable {
                 hasNext = Optional.of(iterate);
                 return iterate;
             } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file '" + store.getPath() + "");
+                throw new IllegalStateException("Cannot read file '" + file.getPath() + "");
             }
         }
 
@@ -203,7 +207,7 @@ class Batch implements Closeable {
                 value = null;
                 return guid;
             } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file: '" + store.getPath() + "");
+                throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
             }
         }
 
@@ -236,11 +240,11 @@ class Batch implements Closeable {
                 Batch.this.removedNumber++;
                 Batch.this.removedSize += seek + guid.length() + 3 + String.valueOf(seek).length();
             } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file: '" + store.getPath() + "");
+                throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
             }
         }
 
-        public String currentValue() {
+        public String getValue() {
             if (value != null) {
                 return value;
             }
@@ -250,7 +254,7 @@ class Batch implements Closeable {
                 randomAccessFile.seek(prev);
                 return value;
             } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file: '" + store.getPath() + "");
+                throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
             }
         }
 
@@ -266,9 +270,9 @@ class Batch implements Closeable {
         private void init() {
             if (randomAccessFile == null) {
                 try {
-                    randomAccessFile = new RandomAccessFile(store, "rw");
+                    randomAccessFile = new RandomAccessFile(file, "rw");
                 } catch (FileNotFoundException e) {
-                    throw new IllegalStateException("File is not found: '" + store.getPath() + "");
+                    throw new IllegalStateException("File is not found: '" + file.getPath() + "");
                 }
             }
         }
