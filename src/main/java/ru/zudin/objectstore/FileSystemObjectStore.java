@@ -16,6 +16,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
     private static final String DIVISOR = " ";
 
     private final String folder;
+    private final int initBatchSize;
     private Map<String, String> index;
     private List<String> batches;
 
@@ -23,7 +24,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
         this(folder, 4);
     }
 
-    public FileSystemObjectStore(String folder, int batchSize) {
+    public FileSystemObjectStore(String folder, int initBatchSize) {
         //todo: check batch size
         if (!folder.endsWith("/")) {
             folder += "/";
@@ -31,20 +32,13 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
         this.folder = folder;
         this.index = new HashMap<>();
         this.batches = new ArrayList<>();
+        this.initBatchSize = initBatchSize;
+        //todo: move from constructor
         scan();
-        int i = 0;
-        while (batches.size() < batchSize) {
-            String batch;
-            while (true) {
-                batch = "batch-" + i++ + ".fsos";
-                if (!batches.contains(batch)) {
-                    break;
-                }
-            }
-            batches.add(batch);
-        }
+        createBatches();
     }
 
+    @Override
     public String put(Serializable object) throws IOException {
         String guid = generateGuid();
         //todo: big files?
@@ -57,7 +51,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
             }
         }
         PrintWriter writer = new PrintWriter(new FileOutputStream(file, true));
-        writer.println(guid + DIVISOR + serializedValue.length());
+        writer.println("1 " + guid + DIVISOR + serializedValue.length());
         writer.println(serializedValue);
         writer.flush();
         writer.close();
@@ -65,6 +59,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
         return guid;
     }
 
+    @Override
     public Optional<Object> get(String guid) throws IOException {
         String batch = index.get(guid);
         if (batch == null) {
@@ -87,8 +82,28 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
         return Optional.empty();
     }
 
+    @Override
     public void delete(String guid) {
-        throw new UnsupportedOperationException();
+        String batch = index.get(guid);
+        if (batch != null) {
+            ObjectStoreIterator iterator = new ObjectStoreIterator(getFile(batch));
+            while (iterator.hasNext()) {
+                String savedGuid = iterator.next();
+                if (guid.equals(savedGuid)) {
+                    iterator.remove();
+                    break;
+                }
+            }
+        }
+    }
+
+    //for testing
+    protected void clear() {
+        File[] files = getFiles();
+        for (File file : files) {
+            file.delete();
+        }
+        createBatches();
     }
 
     private String encodeValue(Serializable object) {
@@ -117,12 +132,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
     }
 
     private boolean scan() {
-        File path = new File(folder);
-        if (!path.isDirectory()) {
-            throw new IllegalArgumentException("Folder is invalid");
-        }
-        Pattern pattern = Pattern.compile("batch-\\d+\\.fsos");
-        File[] files = path.listFiles(pathname -> pattern.matcher(pathname.getName()).matches());
+        File[] files = getFiles();
         if (files.length == 0) {
             return false;
         } else {
@@ -134,6 +144,28 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore {
         }
     }
 
+    private File[] getFiles() {
+        File path = new File(folder);
+        if (!path.isDirectory()) {
+            throw new IllegalArgumentException("Folder is invalid");
+        }
+        Pattern pattern = Pattern.compile("batch-\\d+\\.fsos");
+        return path.listFiles(pathname -> pattern.matcher(pathname.getName()).matches());
+    }
+
+    private void createBatches() {
+        int i = 0;
+        while (batches.size() < initBatchSize) {
+            String batch;
+            while (true) {
+                batch = "batch-" + i++ + ".fsos";
+                if (!batches.contains(batch)) {
+                    break;
+                }
+            }
+            batches.add(batch);
+        }
+    }
 
     private void fillIndex(File file) {
         ObjectStoreIterator iterator = new ObjectStoreIterator(file);
