@@ -204,13 +204,13 @@ public class FileSystemObjectStoreTest {
     @Test
     public void test9PutThreshold() throws Exception {
         FileSystemObjectStore store = new FileSystemObjectStore(FileSystemObjectStoreSpeedTest.getOrCreatePath(), 4,
-                0.33, 1024 * 1024 * 1);
+                0.33, 1024 * 128);
         try {
             store.clear();
             int initSize = store.getBatches().size();
             Map<String, String> guids = new HashMap<>();
             String str = "Put me in store, please! I'm ";
-            for (int i = 1; i < 50000; i++) {
+            for (int i = 1; i < 10000; i++) {
                 String put = str + i;
                 String guid = store.put(put);
                 guids.put(guid, put);
