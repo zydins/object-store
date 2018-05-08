@@ -24,24 +24,30 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     private final int initBatchSize;
     private final double sizeLoadFactor;
     private final long fileSizeThreshold;
+    private final BatchType batchType;
 
     private Map<String, Position> index;
     private List<Batch> batches;
 
     public FileSystemObjectStore(String folder) {
-        this(folder, 4);
+        this(folder, BatchType.BASE_64);
     }
 
-    public FileSystemObjectStore(String folder, int initBatchSize) {
-        this(folder, initBatchSize, 0.66, 1024 * 1024 * 500);
+    public FileSystemObjectStore(String folder, BatchType batchType) {
+        this(folder, batchType, 4);
     }
 
-    public FileSystemObjectStore(String folder, int initBatchSize, double sizeLoadFactor, long fileSizeThreshold) {
+    public FileSystemObjectStore(String folder, BatchType batchType, int initBatchSize) {
+        this(folder, batchType, initBatchSize, 0.66, 1024 * 1024 * 500);
+    }
+
+    public FileSystemObjectStore(String folder, BatchType batchType, int initBatchSize, double sizeLoadFactor, long fileSizeThreshold) {
         //todo: check batch size
         if (!folder.endsWith("/")) {
             folder += "/";
         }
         this.folder = folder;
+        this.batchType = batchType;
         this.index = new HashMap<>();
         this.batches = new ArrayList<>();
         this.initBatchSize = initBatchSize;
@@ -61,7 +67,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         lazyInit();
         String guid = generateGuid();
         byte[] bytes = SerializationUtils.serialize(object);
-        Batch batch = getBatch(guid);
+        Batch batch = selectBatch(guid);
         long pos = batch.write(guid, bytes);
         index.put(guid, new Position(batch, pos));
         rebalanceIfNeeded(batch);
@@ -80,10 +86,10 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
                     .getAsDouble();
             int i = 0;
             int j = 0;
-            while (i < oldies.size() && j < created.size()) {
-                Batch from = oldies.get(i);
-                Batch to = created.get(j);
-                BatchIterator fromIterator = from.createIterator();
+            Batch from = oldies.get(i);
+            Batch to = created.get(j);
+            BatchIterator fromIterator = from.createIterator();
+            while (true) {
                 while (fromIterator.hasNext() && from.validSize() > averageSize && to.validSize() <= averageSize) {
                     String guid = fromIterator.next();
                     byte[] bytes = fromIterator.value();
@@ -93,8 +99,19 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
                 }
                 if (from.validSize() <= averageSize) {
                     i++;
+                    if (i < oldies.size()) {
+                        from = oldies.get(i);
+                        fromIterator = from.createIterator();
+                    } else {
+                        break;
+                    }
                 } else {
                     j++;
+                    if (j < created.size()) {
+                        to = created.get(j);
+                    } else {
+                        break;
+                    }
                 }
             }
             long elapsed = System.currentTimeMillis() - start;
@@ -204,7 +221,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         }
     }
 
-    private Batch getBatch(String guid) {
+    private Batch selectBatch(String guid) {
         return batches.get(Math.abs(guid.hashCode()) % batches.size());
     }
 
@@ -214,7 +231,19 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
             return false;
         } else {
             for (File file : files) {
-                Base64Batch batch = new Base64Batch(folder, file.getName(), sizeLoadFactor, fileSizeThreshold);
+                String fileName = file.getName();
+                String extention = fileName.split("\\.")[1];
+                BatchType batchType = null;
+                for (BatchType type : BatchType.values()) {
+                    if (type.getExtention().equals(extention)) {
+                        batchType = type;
+                        break;
+                    }
+                }
+                if (batchType == null) {
+                    continue;
+                }
+                Batch batch = getBatch(fileName);
                 Map<String, Long> defragment = batch.defragment();
                 for (String guid : defragment.keySet()) {
                     index.put(guid, new Position(batch, defragment.get(guid)));
@@ -230,7 +259,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         if (!path.isDirectory()) {
             throw new IllegalArgumentException("Folder is invalid");
         }
-        Pattern pattern = Pattern.compile("batch-\\d+\\.fsos");
+        Pattern pattern = Pattern.compile("batch-\\d+\\..+"); //todo: support types
         return path.listFiles(pathname -> pattern.matcher(pathname.getName()).matches());
     }
 
@@ -240,7 +269,8 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         while (batches.size() < batchSize) {
             Batch batch;
             while (true) {
-                batch = new Base64Batch(folder, "batch-" + i++ + ".fsos", sizeLoadFactor, fileSizeThreshold);
+                String name = "batch-" + i++ + "." + batchType.getExtention();
+                batch = getBatch(name);
                 if (!batches.contains(batch)) {
                     break;
                 }
@@ -249,6 +279,18 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
             created.add(batch);
         }
         return created;
+    }
+
+    private Batch getBatch(String name) {
+        Batch batch;
+        if (batchType == BatchType.BASE_64) {
+            batch = new Base64Batch(folder, name, sizeLoadFactor, fileSizeThreshold);
+        } else if (batchType == BatchType.BINARY) {
+            batch = new BinaryBatch(folder, name, sizeLoadFactor, fileSizeThreshold);
+        } else {
+            throw new IllegalStateException("Unsupported type " + batchType);
+        }
+        return batch;
     }
 
     private class Position {
@@ -270,6 +312,21 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
 
         public void setPos(long pos) {
             this.pos = pos;
+        }
+    }
+
+    public enum BatchType {
+        BINARY("bnos"),
+        BASE_64("bsos");
+
+        private String extention;
+
+        BatchType(String extention) {
+            this.extention = extention;
+        }
+
+        public String getExtention() {
+            return extention;
         }
     }
 }

@@ -2,7 +2,6 @@ package ru.zudin.objectstore.impl;
 
 import org.apache.commons.lang.BooleanUtils;
 import org.apache.commons.lang.StringUtils;
-import ru.zudin.objectstore.Batch;
 import ru.zudin.objectstore.BatchIterator;
 
 import java.io.*;
@@ -12,53 +11,27 @@ import java.util.*;
  * @author Sergey Zudin
  * @since 08.05.18.
  */
-class Base64Batch implements Batch {
+class Base64Batch extends AbstractBatch {
 
-    private final String path;
-    private final String name;
-    private final File file;
-    private final double sizeLoadFactor;
-    private final long fileSizeThreshold;
     private PrintWriter printWriter;
-    private int removedNumber;
-    private int removedSize;
+    protected int removedSize;
 
     public Base64Batch(String path, String name, double sizeLoadFactor, long fileSizeThreshold) {
-        this.path = path;
-        this.name = name;
-        this.fileSizeThreshold = fileSizeThreshold;
-        this.file = new File(path + name);
+        super(path, name, sizeLoadFactor, fileSizeThreshold);
         this.printWriter = null;
-        this.removedNumber = 0;
-        this.removedSize = 0;
-        this.sizeLoadFactor = sizeLoadFactor;
     }
 
     @Override
-    public String getName() {
-        return name;
-    }
-
-    private PrintWriter getPrintWriter() throws IOException {
-        if (printWriter == null) {
-            printWriter = createPrintWriter();
+    public void close() throws IOException {
+        if (printWriter != null) {
+            printWriter.close();
         }
-        return printWriter;
     }
 
     @Override
     public long write(String guid, byte[] bytes) throws IOException {
         PrintWriter writer = getPrintWriter();
         return write(writer, guid, bytes);
-    }
-
-    @Override
-    public void delete(long pos) throws IOException {
-        BatchIterator iterator = createIterator();
-        iterator.setStartPos(pos);
-        iterator.next();
-        iterator.remove();
-        iterator.close();
     }
 
     private long write(PrintWriter writer, String guid, byte[] bytes) {
@@ -71,34 +44,8 @@ class Base64Batch implements Batch {
     }
 
     @Override
-    public void delete(Set<String> guids) {
-        BatchIterator iterator = createIterator();
-        while (iterator.hasNext()) {
-            String next = iterator.next();
-            if (guids.contains(next)) {
-                iterator.remove();
-            }
-        }
-    }
-
-    @Override
-    public Optional<byte[]> get(long pos) throws IOException {
-        BatchIterator iterator = createIterator();
-        iterator.setStartPos(pos);
-        iterator.next();
-        byte[] value = iterator.value();
-        iterator.close();
-        return Optional.of(value);
-    }
-
-    @Override
     public BatchIterator createIterator() {
         return new Base64BatchIterator();
-    }
-
-    @Override
-    public long fileSize() {
-        return file.length();
     }
 
     @Override
@@ -107,32 +54,11 @@ class Base64Batch implements Batch {
     }
 
     @Override
-    public Optional<Map<String, Long>> defragmentIfNeeded() throws IOException {
-        if (isDefragmentationNeeded()) {
-            return Optional.of(defragment());
-        } else {
-            return Optional.empty();
-        }
-    }
-
-    private boolean isDefragmentationNeeded() {
-        double fileSize = (double) fileSize();
-        double proportion = removedSize / fileSize;
-        return proportion >= sizeLoadFactor || (fileSize > fileSizeThreshold && removedSize != 0);
-//        if (proportion < sizeLoadFactor) {
-//            double avgSize = removedSize / (double) removedNumber; //todo: correct?
-//            double totalNumber = fileSize / avgSize; //todo: if total size is small - ignore?
-//            return removedNumber / totalNumber >= 0.33;
-//        }
-//        return true;
-    }
-
-    @Override
     public Map<String, Long> defragment() throws IOException {
-        System.out.println("Defragmentation start for " + name);
+        System.out.println("Defragmentation start for " + getName());
         long start = System.currentTimeMillis();
         Map<String, Long> positions = new HashMap<>();
-        File newFile = new File(path + name + ".new");
+        File newFile = new File(file.getName() + ".new");
         PrintWriter clearWriter = new PrintWriter(newFile);
         BatchIterator oldIterator = createIterator();
         while (oldIterator.hasNext()) {
@@ -150,45 +76,28 @@ class Base64Batch implements Batch {
             printWriter.close();
             printWriter = null;
         }
-        removedNumber = 0;
-        removedSize = 0;
         long elapsed = System.currentTimeMillis() - start;
-        System.out.println(String.format("Defragmentation finish for %s, took %d millis", name, elapsed));
+        System.out.println(String.format("Defragmentation finish for %s, took %d millis", getName(), elapsed));
         return positions;
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof Base64Batch)) return false;
-
-        Base64Batch batch = (Base64Batch) o;
-
-        return name.equals(batch.name);
-
-    }
-    @Override
-    public int hashCode() {
-        return name.hashCode();
-    }
-
-    @Override
-    public void close() throws IOException {
-        if (printWriter != null) {
-            printWriter.close();
+    private PrintWriter getPrintWriter() throws IOException {
+        if (printWriter == null) {
+            printWriter = createPrintWriter();
         }
+        return printWriter;
     }
 
     private PrintWriter createPrintWriter() throws IOException {
         if (!file.exists()) {
             if (!file.createNewFile()) {
-                throw new IOException("Cannot create file '" + name + "'");
+                throw new IOException("Cannot create file '" + getName() + "'");
             }
         }
         return new PrintWriter(new FileOutputStream(file, true));
     }
 
-    public class Base64BatchIterator implements BatchIterator {
+    class Base64BatchIterator implements BatchIterator {
         static final String DIVISOR = " ";
 
         private RandomAccessFile randomAccessFile;
@@ -267,7 +176,6 @@ class Base64Batch implements Batch {
                 randomAccessFile.seek(pos);
                 randomAccessFile.writeBytes("0"); //mark removed
                 randomAccessFile.seek(prev);
-                Base64Batch.this.removedNumber++;
                 Base64Batch.this.removedSize += seek + guid.length() + 3 + String.valueOf(seek).length();
             } catch (IOException e) {
                 throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");

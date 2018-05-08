@@ -16,15 +16,17 @@ import static org.junit.Assert.*;
  * @author sergey
  * @since 07.05.18
  */
-public class FileSystemObjectStoreTest {
+public abstract class AbstractFileSystemObjectStoreTest {
 
     private FileSystemObjectStore store;
 
     @Before
     public void setUp() throws Exception {
         String path = FileSystemObjectStoreSpeedTest.getOrCreatePath();
-        store = new FileSystemObjectStore(path);
+        store = new FileSystemObjectStore(path, getType());
     }
+
+    protected abstract FileSystemObjectStore.BatchType getType();
 
     @After
     public void close() throws Exception {
@@ -205,8 +207,8 @@ public class FileSystemObjectStoreTest {
 
     @Test
     public void test9PutThreshold() throws Exception {
-        FileSystemObjectStore store = new FileSystemObjectStore(FileSystemObjectStoreSpeedTest.getOrCreatePath(), 4,
-                0.33, 1024 * 128);
+        FileSystemObjectStore store = new FileSystemObjectStore(FileSystemObjectStoreSpeedTest.getOrCreatePath(),
+                getType(), 4, 0.33, 1024 * 128);
         try {
             store.clear();
             int initSize = store.getBatches().size();

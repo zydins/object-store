@@ -18,7 +18,7 @@ public interface Batch extends Closeable {
 
     void delete(long pos) throws IOException;
 
-    void delete(Set<String> guids);
+    void delete(Set<String> guids) throws IOException;
 
     Optional<byte[]> get(long pos) throws IOException;
 
