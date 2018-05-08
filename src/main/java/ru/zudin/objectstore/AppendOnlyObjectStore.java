@@ -3,6 +3,7 @@ package ru.zudin.objectstore;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.Collection;
 import java.util.Optional;
 
 /**
@@ -17,4 +18,5 @@ public interface AppendOnlyObjectStore {
 
     void delete(String guid);
 
+    void delete(Collection<String> guids);
 }

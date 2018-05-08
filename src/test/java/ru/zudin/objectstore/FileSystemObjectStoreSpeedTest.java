@@ -40,7 +40,7 @@ public class FileSystemObjectStoreSpeedTest {
     }
 
     @Test
-    public void test1EqualSmall() throws Exception {
+    public void test1PutSmall() throws Exception {
         store.clear();
         int count = 0;
         long avgSpeed = 0;

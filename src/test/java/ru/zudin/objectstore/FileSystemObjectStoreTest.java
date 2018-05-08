@@ -126,4 +126,54 @@ public class FileSystemObjectStoreTest {
         }
     }
 
+    @Test
+    public void test6RemoveMultiple() throws Exception {
+        store.clear();
+        List<String> removed = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            String value = "Hello wonkies " + i;
+            String guid = store.put(value);
+            if (i % 4 == 0) {
+                removed.add(guid);
+            }
+        }
+        store.delete(removed);
+        for (String guid : removed) {
+            Optional<Object> optional = store.get(guid);
+            assertTrue(!optional.isPresent());
+        }
+    }
+
+    @Test
+    public void test7Defragment() throws Exception {
+        store.clear();
+        List<Batch> batches = store.getBatches();
+        System.out.println("### Before insert ###");
+        for (Batch batch : batches) {
+            System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+        }
+        List<String> toDelete = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            String value = "Hello wonkies " + i;
+            String guid = store.put(value);
+            if (i % 4 == 0) {
+                toDelete.add(guid);
+            }
+        }
+        System.out.println("### After insert ###");
+        for (Batch batch : batches) {
+            System.out.println(String.format("Batch %s, size: %d", batch.getName(), batch.fileSize()));
+        }
+        store.delete(toDelete);
+        System.out.println("### After delete ###");
+        for (Batch batch : batches) {
+            long oldSize = batch.fileSize();
+            batch.defragment();
+            long newSize = batch.fileSize();
+            System.out.println(String.format("Batch %s, size after logical delete: %d, size after file delete: %d",
+                    batch.getName(), oldSize, newSize));
+            assertTrue(newSize < oldSize);
+        }
+    }
+
 }

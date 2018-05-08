@@ -2,17 +2,19 @@ package ru.zudin.objectstore;
 
 import org.apache.commons.lang.SerializationUtils;
 
-import java.io.*;
+import java.io.Closeable;
+import java.io.File;
+import java.io.IOException;
+import java.io.Serializable;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * @author sergey
  * @since 07.05.18
  */
 public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
-
-    private static final String DIVISOR = " ";
 
     private final String folder;
     private final int initBatchSize;
@@ -32,14 +34,19 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         this.index = new HashMap<>();
         this.batches = new ArrayList<>();
         this.initBatchSize = initBatchSize;
-        //todo: move from constructor
-        scan();
-        createBatches();
+    }
+
+    private void lazyInit() {
+        if (batches.isEmpty()) {
+            scan();
+            createBatches();
+        }
     }
 
     @Override
     public String put(Serializable object) throws IOException {
-//        long[] times = new long[9];
+        lazyInit();
+//        long[] times = new long[6];
 //        int i = 0;
 //        times[i++] = System.currentTimeMillis();
         String guid = generateGuid();
@@ -49,13 +56,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
 //        times[i++] = System.currentTimeMillis();
         Batch batch = getBatch(guid);
 //        times[i++] = System.currentTimeMillis();
-        PrintWriter writer = batch.getPrintWriter();
-//        times[i++] = System.currentTimeMillis();
-        writer.println("1 " + guid + DIVISOR + serializedValue.length());
-//        times[i++] = System.currentTimeMillis();
-        writer.println(serializedValue);
-//        times[i++] = System.currentTimeMillis();
-        writer.flush();
+        batch.write(guid, serializedValue);
 //        times[i++] = System.currentTimeMillis();
         index.put(guid, batch);
 //        times[i++] = System.currentTimeMillis();
@@ -69,12 +70,13 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
 
     @Override
     public Optional<Object> get(String guid) throws IOException {
+        lazyInit();
         Batch batch = index.get(guid);
         if (batch == null) {
             return Optional.empty();
         }
         try {
-            BatchIterator iterator = batch.createIterator();
+            Batch.BatchIterator iterator = batch.createIterator();
             while (iterator.hasNext()) {
                 String savedGuid = iterator.next();
                 if (guid.equals(savedGuid)) {
@@ -92,9 +94,10 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
 
     @Override
     public void delete(String guid) {
+        lazyInit();
         Batch batch = index.get(guid);
         if (batch != null) {
-            BatchIterator iterator = batch.createIterator();
+            Batch.BatchIterator iterator = batch.createIterator();
             while (iterator.hasNext()) {
                 String savedGuid = iterator.next();
                 if (guid.equals(savedGuid)) {
@@ -106,13 +109,25 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     }
 
     @Override
+    public void delete(Collection<String> guids) {
+        lazyInit();
+        Map<Batch, Set<String>> grouped = guids.stream()
+                .distinct()
+                .filter(index::containsKey)
+                .collect(Collectors.groupingBy(index::get, Collectors.toSet()));
+        for (Batch batch : grouped.keySet()) {
+            batch.delete(grouped.get(batch));
+        }
+    }
+
+    @Override
     public void close() throws IOException {
         for (Batch batch : batches) {
             batch.close();
         }
     }
 
-    //for testing
+    /* START TESTING */
     protected void clear() {
         File[] files = getFiles();
         for (File file : files) {
@@ -120,6 +135,11 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         }
         createBatches();
     }
+
+    protected List<Batch> getBatches() {
+        return batches;
+    }
+    /* END TESTING */
 
     private String encodeValue(Serializable object) {
         return Base64.getEncoder().encodeToString(SerializationUtils.serialize(object));
@@ -148,8 +168,9 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
             return false;
         } else {
             for (File file : files) {
-                fillIndex(file);
-                batches.add(new Batch(folder, file.getName()));
+                Batch batch = new Batch(folder, file.getName());
+                fillIndex(batch);
+                batches.add(batch);
             }
             return true;
         }
@@ -178,11 +199,11 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         }
     }
 
-    private void fillIndex(File file) {
-        BatchIterator iterator = new BatchIterator(file);
+    private void fillIndex(Batch batch) {
+        Batch.BatchIterator iterator = batch.createIterator();
         while (iterator.hasNext()) {
             String guid = iterator.next();
-            index.put(guid, new Batch(folder, file.getName()));
+            index.put(guid, batch);
         }
     }
 }
