@@ -4,11 +4,11 @@ import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import ru.zudin.objectstore.ObjectStoreExample;
 
-import java.io.File;
-import java.util.*;
-
-import static org.junit.Assert.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * @author Sergey Zudin
@@ -18,22 +18,9 @@ public class FileSystemObjectStoreSpeedTest {
 
     private FileSystemObjectStore store;
 
-    protected static String getOrCreatePath() {
-        String path = System.getProperty("user.dir");
-        if (!path.endsWith("/")) {
-            path += "/";
-        }
-        path += "files/";
-        File filesPath = new File(path);
-        if (!filesPath.exists()) {
-            filesPath.mkdir();
-        }
-        return path;
-    }
-
     @Before
     public void setUp() throws Exception {
-        String path = FileSystemObjectStoreSpeedTest.getOrCreatePath();
+        String path = ObjectStoreExample.getOrCreatePath();
         store = new FileSystemObjectStore(path, FileSystemObjectStore.BatchType.BINARY);
     }
 
@@ -70,7 +57,7 @@ public class FileSystemObjectStoreSpeedTest {
     @Test
     public void test2RemoveNoDefragmentation() throws Exception {
         //todo: rewrite
-        FileSystemObjectStore store = new FileSystemObjectStore(getOrCreatePath(),
+        FileSystemObjectStore store = new FileSystemObjectStore(ObjectStoreExample.getOrCreatePath(),
                 FileSystemObjectStore.BatchType.BASE_64, 4, 1, 1024 * 1024 * 500);
         try {
             store.deleteFiles();
@@ -143,102 +130,7 @@ public class FileSystemObjectStoreSpeedTest {
     @Test
     public void test4PutGetRemove() throws Exception {
         store.deleteFiles();
-        int count = 0;
-        long timeTotal = 0;
-        String str = "Test string ";
-        List<String> guids = new ArrayList<>();
-        System.out.println("### Insert ###");
-        for (int i = 1; i <= 100000; i++) {
-            int random = new Random().nextInt((int) Math.sqrt(i));
-            ArrayList<String> list = new ArrayList<>();
-            for (int j = 0; j <= random; j++) {
-                list.add(str + i + "/" + j);
-            }
-            HashMap<Integer, List<String>> map = new HashMap<>();
-            map.put(list.hashCode(), list);
-            long start = System.currentTimeMillis();
-            String guid = store.put(map);
-            long elapsed = System.currentTimeMillis() - start;
-            timeTotal += elapsed;
-            count++;
-            guids.add(guid);
-            if (i % 5000 == 0) {
-                System.out.println(String.format("Count: %d: avg. time=%f, total=%d", count,
-                        timeTotal / (double) count, timeTotal));
-            }
-        }
-
-        System.out.println("### Get 1 ###");
-        Collections.shuffle(guids);
-        count = 0;
-        timeTotal = 0;
-        for (int i = 1; i <= 10000; i++) {
-            String guid = guids.get(i - 1);
-            long start = System.currentTimeMillis();
-            Optional<Object> optional = store.get(guid);
-            long elapsed = System.currentTimeMillis() - start;
-            timeTotal += elapsed;
-            count++;
-            if (i % 1000 == 0) {
-                System.out.println(String.format("Count: %d: avg. time=%f, total=%d", count,
-                        timeTotal / (double) count, timeTotal));
-            }
-            assertTrue(optional.isPresent());
-            Object o = optional.get();
-            assertTrue(o instanceof Map);
-            Map<Integer, List<String>> map = (Map<Integer, List<String>>) o;
-            for (Integer hash : map.keySet()) {
-                List<String> list = map.get(hash);
-                assertEquals(hash.intValue(), list.hashCode());
-            }
-        }
-
-        System.out.println("### Delete ###");
-        Collections.shuffle(guids);
-        count = 0;
-        timeTotal = 0;
-        Iterator<String> iterator = guids.iterator();
-        int ind = 0;
-        while (iterator.hasNext() && ind++ < 50000) {
-            String guid = iterator.next();
-            long start = System.currentTimeMillis();
-            store.delete(guid);
-            long elapsed = System.currentTimeMillis() - start;
-            timeTotal += elapsed;
-            count++;
-            if (ind % 5000 == 0) {
-                System.out.println(String.format("Count: %d: avg. time=%f, total=%d", count,
-                        timeTotal / (double) count, timeTotal));
-            }
-            Optional<Object> optional = store.get(guid);
-            assertFalse(optional.isPresent());
-            iterator.remove();
-        }
-
-        System.out.println("### Get 2 ###");
-        Collections.shuffle(guids);
-        count = 0;
-        timeTotal = 0;
-        for (int i = 1; i <= guids.size(); i++) {
-            String guid = guids.get(i - 1);
-            long start = System.currentTimeMillis();
-            Optional<Object> optional = store.get(guid);
-            long elapsed = System.currentTimeMillis() - start;
-            timeTotal += elapsed;
-            count++;
-            if (i % 5000 == 0) {
-                System.out.println(String.format("Count: %d: avg. time=%f, total=%d", count,
-                        timeTotal / (double) count, timeTotal));
-            }
-            assertTrue(optional.isPresent());
-            Object o = optional.get();
-            assertTrue(o instanceof Map);
-            Map<Integer, List<String>> map = (Map<Integer, List<String>>) o;
-            for (Integer hash : map.keySet()) {
-                List<String> list = map.get(hash);
-                assertEquals(hash.intValue(), list.hashCode());
-            }
-        }
+        ObjectStoreExample.test(store);
     }
 
 }

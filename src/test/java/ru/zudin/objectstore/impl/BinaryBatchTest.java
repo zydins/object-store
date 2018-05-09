@@ -4,6 +4,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import ru.zudin.objectstore.BatchIterator;
+import ru.zudin.objectstore.ObjectStoreExample;
 
 import java.io.IOException;
 import java.util.NoSuchElementException;
@@ -21,7 +22,7 @@ public class BinaryBatchTest {
 
     @Before
     public void setUp() throws Exception {
-        String path = FileSystemObjectStoreSpeedTest.getOrCreatePath();
+        String path = ObjectStoreExample.getOrCreatePath();
         batch = new BinaryBatch(path, "test-batch.tmp", 0.33, 1024 * 1024 * 200);
     }
 

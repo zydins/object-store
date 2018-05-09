@@ -7,6 +7,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import ru.zudin.objectstore.Batch;
+import ru.zudin.objectstore.ObjectStoreExample;
 
 import java.io.IOException;
 import java.util.*;
@@ -27,7 +28,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
     }
 
     private FileSystemObjectStore buildStore() {
-        String path = FileSystemObjectStoreSpeedTest.getOrCreatePath();
+        String path = ObjectStoreExample.getOrCreatePath();
         return new FileSystemObjectStore(path, getType());
     }
 
@@ -214,7 +215,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test9Rebalance() throws Exception {
-        FileSystemObjectStore store = new FileSystemObjectStore(FileSystemObjectStoreSpeedTest.getOrCreatePath(),
+        FileSystemObjectStore store = new FileSystemObjectStore(ObjectStoreExample.getOrCreatePath(),
                 getType(), 4, 0.33, 1024 * 128);
         try {
             store.deleteFiles();
