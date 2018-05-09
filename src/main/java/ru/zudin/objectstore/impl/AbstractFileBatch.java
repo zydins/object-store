@@ -13,6 +13,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
+ * Common file batch implementation
+ *
  * @author sergey
  * @since 09.05.18
  */
@@ -36,8 +38,12 @@ abstract class AbstractFileBatch implements Batch {
         return name;
     }
 
+    /**
+     * Get object via setting the start position in iterator
+     */
     @Override
     public Optional<byte[]> get(long pos) throws IOException {
+        //todo: check that position is valid
         BatchIterator iterator = createIterator();
         iterator.setStartPos(pos);
         byte[] value = null;
@@ -49,6 +55,9 @@ abstract class AbstractFileBatch implements Batch {
         return Optional.ofNullable(value);
     }
 
+    /**
+     * Mark object deleted via setting the start position in iterator
+     */
     @Override
     public void delete(long pos) throws IOException {
         BatchIterator iterator = createIterator();
@@ -60,6 +69,9 @@ abstract class AbstractFileBatch implements Batch {
         iterator.close();
     }
 
+    /**
+     * Mark objects deleted via iteration over file
+     */
     @Override
     public void delete(Set<String> guids) throws IOException {
         BatchIterator iterator = createIterator();
@@ -82,6 +94,10 @@ abstract class AbstractFileBatch implements Batch {
         return fileSize() - removedSize;
     }
 
+    /**
+     * Call defragmentation if precondition is met
+     * @return new positions of objects
+     */
     @Override
     public Optional<Map<String, Long>> defragmentIfNeeded() throws IOException {
         if (isDefragmentationNeeded()) {
@@ -89,6 +105,15 @@ abstract class AbstractFileBatch implements Batch {
         } else {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Defragment file if proportion of deleted size to total size is greater that fixed factor
+     */
+    private boolean isDefragmentationNeeded() {
+        double fileSize = (double) fileSize();
+        double proportion = validSize() / fileSize;
+        return 1 - proportion >= sizeLoadFactor || (fileSize > fileSizeThreshold && 1 - validSize() != 0);
     }
 
     @Override
@@ -102,6 +127,11 @@ abstract class AbstractFileBatch implements Batch {
         return positions;
     }
 
+    /**
+     * Real implementation of defragmentation
+     */
+    protected abstract Map<String,Long> innerDefragment() throws FileNotFoundException, IOException;
+
     @Override
     public BatchIterator createIterator() throws IOException {
         if (!file.exists()) {
@@ -110,9 +140,10 @@ abstract class AbstractFileBatch implements Batch {
         return innerCreateIterator();
     }
 
+    /**
+     * Real creation of iterator
+     */
     protected abstract BatchIterator innerCreateIterator();
-
-    protected abstract Map<String,Long> innerDefragment() throws FileNotFoundException, IOException;
 
     @Override
     public boolean equals(Object o) {
@@ -122,19 +153,21 @@ abstract class AbstractFileBatch implements Batch {
         AbstractFileBatch batch = (AbstractFileBatch) o;
 
         return getName().equals(batch.getName());
-
     }
+
     @Override
     public int hashCode() {
         return getName().hashCode();
     }
 
-    private boolean isDefragmentationNeeded() {
-        double fileSize = (double) fileSize();
-        double proportion = validSize() / fileSize;
-        return 1 - proportion >= sizeLoadFactor || (fileSize > fileSizeThreshold && 1 - validSize() != 0);
-    }
-
+    /**
+     * Common realisation of batch iterator. It is used a RandomAccessFile object
+     * to iterate over file entries. Entry contains key (guid), value (object),
+     * status (active/deleted), size of value in bytes and some meta-information which depends on realisation.
+     * Use of RandomAccessFile allows to 'jump' from key position to value position and back.
+     * That, in other hand, allows to read objects only when it is required and do not use
+     * unnecessary space when it is possible.
+     */
     protected abstract class AbstractFileBatchIterator implements BatchIterator {
         private RandomAccessFile randomAccessFile;
         protected String guid;
@@ -155,6 +188,9 @@ abstract class AbstractFileBatch implements Batch {
             wasRemove = false;
         }
 
+        /**
+         * Lazy initialization of RandomAccessFile
+         */
         private void init() {
             if (randomAccessFile == null) {
                 try {
@@ -165,6 +201,12 @@ abstract class AbstractFileBatch implements Batch {
             }
         }
 
+        /**
+         * Jump to the next entry in file
+         *
+         * @return is there next entry
+         * @throws IOException
+         */
         private boolean iterate() throws IOException {
             while (true) {
                 pos = nextPos(randomAccessFile, seek);
@@ -183,11 +225,30 @@ abstract class AbstractFileBatch implements Batch {
             }
         }
 
-
+        /**
+         * Get start position of next entry
+         *
+         * @param randomAccessFile file with start position at previous value
+         * @param seek size of previous value
+         * @return start position of next entry
+         * @throws IOException
+         */
         protected abstract long nextPos(RandomAccessFile randomAccessFile, long seek) throws IOException;
 
+        /**
+         * Read current status, key (guid), size of value and meta-information.
+         * This method MUST rewrite 'guid' and 'seek' fields.
+         *
+         * @param randomAccessFile file with start position at current entry
+         * @return status of entry
+         * @throws IOException
+         */
         protected abstract boolean readKeyAndGetStatus(RandomAccessFile randomAccessFile) throws IOException;
 
+        /**
+         * Checks if there is a next active element. It have to read next entry to
+         * jump over entries with 'deleted' state.
+         */
         @Override
         public boolean hasNext() {
             init();
@@ -197,12 +258,19 @@ abstract class AbstractFileBatch implements Batch {
                 }
                 boolean iterate = iterate();
                 this.hasNext = Optional.of(iterate);
+                wasNext = false;
                 return iterate;
             } catch (IOException e) {
                 throw new IllegalStateException("Cannot read file '" + file.getPath() + "");
             }
         }
 
+        /**
+         * Returns key (guid) of entry. If there was call of 'hasNext' method, than return extracted value.
+         * Otherwise, read next entry.
+         *
+         * @return guid of the entry
+         */
         @Override
         public String next() {
             init();
@@ -226,6 +294,10 @@ abstract class AbstractFileBatch implements Batch {
             }
         }
 
+        /**
+         * Mark current entry as 'deleted' and updates size of removed entities.
+         * Do not change current position. Might be called ONLY after 'next' method call.
+         */
         @Override
         public void remove() {
             if (!wasNext || wasRemove) {
@@ -243,10 +315,19 @@ abstract class AbstractFileBatch implements Batch {
             }
         }
 
+        /**
+         * Marks current entry as 'deleted'
+         */
         protected abstract void markDeleted(RandomAccessFile randomAccessFile) throws IOException;
 
+        /**
+         * Updates a size of 'deleted' entries
+         */
         protected abstract long updateRemovedSize(String guid, int seek);
 
+        /**
+         * Returns value (saved object) of current entry. Might be called ONLY after 'next' method call.
+         */
         @Override
         public byte[] value() {
             if (value != null) {
@@ -262,13 +343,26 @@ abstract class AbstractFileBatch implements Batch {
             }
         }
 
+        /**
+         * Reads value with size of 'seek' from file with position at start of the saved object.
+         * @param randomAccessFile file with position at start of the saved object
+         * @param seek size of value
+         * @throws IOException
+         */
         protected abstract byte[] readValue(RandomAccessFile randomAccessFile, int seek) throws IOException;
 
+        /**
+         * Returns position at start of current entry
+         */
         @Override
         public long pos() {
             return pos;
         }
 
+        /**
+         * Sets start position for RandomAccessFile
+         * @throws IOException
+         */
         @Override
         public void setStartPos(long pos) throws IOException {
             init();
