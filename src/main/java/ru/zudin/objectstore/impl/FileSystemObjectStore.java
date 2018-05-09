@@ -100,6 +100,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
                 if (from.validSize() <= averageSize) {
                     i++;
                     if (i < oldies.size()) {
+                        fromIterator.close();
                         from = oldies.get(i);
                         fromIterator = from.createIterator();
                     } else {
@@ -114,6 +115,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
                     }
                 }
             }
+            fromIterator.close();
             long elapsed = System.currentTimeMillis() - start;
             System.out.println(String.format("Finish re-balance, took %d", elapsed));
             for (Batch old : oldies) {

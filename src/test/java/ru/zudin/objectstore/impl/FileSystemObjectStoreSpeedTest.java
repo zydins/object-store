@@ -34,7 +34,7 @@ public class FileSystemObjectStoreSpeedTest {
     @Before
     public void setUp() throws Exception {
         String path = FileSystemObjectStoreSpeedTest.getOrCreatePath();
-        store = new FileSystemObjectStore(path);
+        store = new FileSystemObjectStore(path, FileSystemObjectStore.BatchType.BINARY);
     }
 
     @After

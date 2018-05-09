@@ -5,13 +5,15 @@ import org.apache.commons.lang.StringUtils;
 import ru.zudin.objectstore.BatchIterator;
 
 import java.io.*;
-import java.util.*;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author Sergey Zudin
  * @since 08.05.18.
  */
-class Base64Batch extends AbstractBatch {
+class Base64Batch extends AbstractFileBatch {
 
     private PrintWriter printWriter;
     protected int removedSize;
@@ -97,131 +99,41 @@ class Base64Batch extends AbstractBatch {
         return new PrintWriter(new FileOutputStream(file, true));
     }
 
-    class Base64BatchIterator implements BatchIterator {
+    class Base64BatchIterator extends AbstractFileBatchIterator {
         static final String DIVISOR = " ";
 
-        private RandomAccessFile randomAccessFile;
-        private String guid;
-        private int seek;
-        private long pos;
-        private byte[] value;
-        private Optional<Boolean> hasNext;
-
-        public Base64BatchIterator() {
-            this.randomAccessFile = null;
-            this.seek = -1;
-            this.guid = null;
-            this.hasNext = Optional.empty();
+        @Override
+        protected long nextPos(RandomAccessFile randomAccessFile, long seek) throws IOException {
+            return seek == 0 ? randomAccessFile.getFilePointer() : randomAccessFile.getFilePointer() + seek + 1;
         }
 
         @Override
-        public boolean hasNext() {
-            init();
-            try {
-                if (hasNext.isPresent()) {
-                    return hasNext.get();
-                }
-                boolean iterate = iterate();
-                hasNext = Optional.of(iterate);
-                return iterate;
-            } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file '" + file.getPath() + "");
+        protected boolean readKeyAndGetStatus(RandomAccessFile randomAccessFile) throws IOException {
+            String line = randomAccessFile.readLine();
+            if (StringUtils.isBlank(line)) {
+                return false;
             }
+            String[] split = line.split(DIVISOR);
+            guid = split[1];
+            seek = Integer.parseInt(split[2]);
+            return BooleanUtils.toBoolean(Integer.parseInt(split[0]));
         }
 
         @Override
-        public String next() {
-            init();
-            try {
-                if (hasNext.isPresent()) {
-                    if (!hasNext.get()) {
-                        throw new NoSuchElementException();
-                    }
-                    hasNext = Optional.empty();
-                } else {
-                    if (!iterate()) {
-                        throw new NoSuchElementException();
-                    }
-                }
-                value = null;
-                return guid;
-            } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
-            }
-        }
-
-        private boolean iterate() throws IOException {
-            while (true) {
-                pos = randomAccessFile.getFilePointer() + seek + 1;
-                randomAccessFile.seek(pos);
-                String line = randomAccessFile.readLine();
-                if (StringUtils.isBlank(line)) {
-                    return false;
-                }
-                String[] split = line.split(DIVISOR);
-                guid = split[1];
-                seek = Integer.parseInt(split[2]);
-                boolean isActive = BooleanUtils.toBoolean(Integer.parseInt(split[0]));
-                if (!isActive) {
-                    continue;
-                }
-                return true;
-            }
+        protected void markDeleted(RandomAccessFile randomAccessFile) throws IOException {
+            randomAccessFile.writeBytes("0");
         }
 
         @Override
-        public void remove() {
-            try {
-                long prev = randomAccessFile.getFilePointer();
-                randomAccessFile.seek(pos);
-                randomAccessFile.writeBytes("0"); //mark removed
-                randomAccessFile.seek(prev);
-                Base64Batch.this.removedSize += seek + guid.length() + 3 + String.valueOf(seek).length();
-            } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
-            }
+        protected long updateRemovedSize(String guid, int seek) {
+            return seek + guid.length() + 3 + String.valueOf(seek).length();
         }
 
         @Override
-        public byte[] value() {
-            if (value != null) {
-                return value;
-            }
-            try {
-                long prev = randomAccessFile.getFilePointer();
-                String str = randomAccessFile.readLine();
-                value = Base64.getDecoder().decode(str);
-                randomAccessFile.seek(prev);
-                return value;
-            } catch (IOException e) {
-                throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
-            }
+        protected byte[] readValue(RandomAccessFile randomAccessFile, int seek) throws IOException {
+            String str = randomAccessFile.readLine();
+            return Base64.getDecoder().decode(str);
         }
 
-        @Override
-        public long pos() {
-            return pos;
-        }
-
-        @Override
-        public void setStartPos(long pos) throws IOException {
-            init();
-            randomAccessFile.seek(pos);
-        }
-
-        private void init() {
-            if (randomAccessFile == null) {
-                try {
-                    randomAccessFile = new RandomAccessFile(file, "rw");
-                } catch (FileNotFoundException e) {
-                    throw new IllegalStateException("File is not found: '" + file.getPath() + "");
-                }
-            }
-        }
-
-        @Override
-        public void close() throws IOException {
-            randomAccessFile.close();
-        }
     }
 }
