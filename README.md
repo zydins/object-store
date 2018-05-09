@@ -10,8 +10,9 @@ Example of using you can find in **ObjectStoreExample.java**. Quick illustration
 ```
 ObjectStore store = new FileSystemObjectStore(path);
 String guid = store.put("String is Seriazlizable");
-Object saved = store.get(guid);
+Optional<Object> optional = store.get(guid);
 store.delete(guid);
+store.close();
 ```
 
 ### How to build executable jar with test:
