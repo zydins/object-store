@@ -307,7 +307,7 @@ abstract class AbstractFileBatch implements Batch {
                 long prev = randomAccessFile.getFilePointer();
                 randomAccessFile.seek(pos);
                 markDeleted(randomAccessFile);
-                removedSize += updateRemovedSize(guid, seek);
+                removedSize += currentEntrySize(guid, seek);
                 randomAccessFile.seek(prev);
                 wasRemove = true;
             } catch (IOException e) {
@@ -323,7 +323,7 @@ abstract class AbstractFileBatch implements Batch {
         /**
          * Updates a size of 'deleted' entries
          */
-        protected abstract long updateRemovedSize(String guid, int seek);
+        protected abstract long currentEntrySize(String guid, int seek);
 
         /**
          * Returns value (saved object) of current entry. Might be called ONLY after 'next' method call.
