@@ -15,6 +15,36 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
+ * Append-only object store based on physical files.
+ *
+ * The main part of store is files batches which contains all required data
+ * about objects (object itself, its guid and state). There is also a index which keep
+ * links from guid to file batch and position there. For now, index is in-memory, so it
+ * is destroyed after stopping of application. After next initialization it is automatically built from
+ * existing batches. This field is direction for future optimization.
+ *
+ * There is two possible ways of storing objects in files, they represented by BatchType class:
+ * BASE_64 - this approach translates object into Base64 string and save it to the file.
+ * When it is store objects in human-readable way, a I/O speed, hoverer, is not so good.
+ * BINARY - this approach translates key/value into binary view.
+ * This way is more space and I/O speed efficient, but it is hard to 'understand' a file.
+ *
+ * Deletion of object is not immediately removes it from the physical batch. Firstly, this object
+ * is marked as 'deleted', so it became invisible for the store. After some time,
+ * if preconditions are met, defragmentation of file batches is executed. This process is
+ * physically remove 'removed' objects from files.
+ *
+ * If there are became too much of objects, the store may decide to increase number of batches
+ * and re-balance active objects between them.
+ *
+ * Possible parameters of store are:
+ * - initBatchSize (how many batches will be used by default if there are no existing
+ * batches or if number of existing batches are less than given value)
+ * - sizeLoadFactor (if proportion of size of deleted objects to total size is greater,
+ * that this parameter, the defragmentation is executed)
+ * - fileSizeThreshold (if size of file batch became bigger than given parameter, than
+ * re-balance of active objects in batches is executed)
+ *
  * @author sergey
  * @since 07.05.18
  */
@@ -41,6 +71,13 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         this(folder, batchType, initBatchSize, 0.33, 1024 * 1024 * 200);
     }
 
+    /**
+     * @param folder folder where batches will be stored, must exist and be available to writing
+     * @param batchType type of storing objects in file
+     * @param initBatchSize default number of batches
+     * @param sizeLoadFactor maximum proportion of deleted objects size to total file size
+     * @param fileSizeThreshold maximum size of file in bytes
+     */
     public FileSystemObjectStore(String folder, BatchType batchType, int initBatchSize, double sizeLoadFactor, long fileSizeThreshold) {
         //todo: check batch size
         if (!folder.endsWith("/")) {
@@ -74,6 +111,17 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         return guid;
     }
 
+    /**
+     * Re-balance batches.
+     *
+     * If re-balance is required, than number of batches doubled, average size of active objects
+     * in batches are computed. Than active objects are moved from big files to new ones and marked
+     * as removed in old file. When relocation of objects are finished, non-required defragmentation
+     * is called for old files.
+     *
+     * @param batch to check is re-balance needed
+     * @throws IOException
+     */
     private void rebalanceIfNeeded(Batch batch) throws IOException {
         if (batch.fileSize() > fileSizeThreshold) {
             System.out.println(String.format("Start re-balance, init size=%d, make=%d", batches.size(), batches.size() * 2));
@@ -151,6 +199,14 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         }
     }
 
+    /**
+     * Call non-required defragmentation of batch. If defragmentation is executed,
+     * new positions are stored in index
+     *
+     * @param batch for which defragmentation is called
+     * @return was defragmentation executed
+     * @throws IOException
+     */
     private boolean defragmentIfNeeded(Batch batch) throws IOException {
         Optional<Map<String, Long>> optMap = batch.defragmentIfNeeded();
         if (optMap.isPresent()) {
@@ -215,11 +271,20 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         }
     }
 
+    /**
+     * Selects batch for given guid. Now distribution of batches is evenly distributed.
+     * TODO: select batch based on its size
+     */
     private Batch selectBatch(String guid) {
         return batches.get(Math.abs(guid.hashCode()) % batches.size());
     }
 
+    /**
+     * Scan working directory for existing batches, enrich index for found files.
+     * For each found file force defragmentation is called.
+     */
     private boolean scan() throws IOException {
+        //todo: support new/old files
         File[] files = getFiles();
         if (files.length == 0) {
             return false;
@@ -275,18 +340,22 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
         return created;
     }
 
-    private Batch getBatch(String name) {
+    private Batch getBatch(String fileName) {
         Batch batch;
         if (batchType == BatchType.BASE_64) {
-            batch = new Base64Batch(folder, name, sizeLoadFactor, fileSizeThreshold);
+            batch = new Base64Batch(folder, fileName, sizeLoadFactor, fileSizeThreshold);
         } else if (batchType == BatchType.BINARY) {
-            batch = new BinaryBatch(folder, name, sizeLoadFactor, fileSizeThreshold);
+            batch = new BinaryBatch(folder, fileName, sizeLoadFactor, fileSizeThreshold);
         } else {
             throw new IllegalStateException("Unsupported type " + batchType);
         }
         return batch;
     }
 
+    /**
+     * Helper class for index. For each guid it contains link to batch and position
+     * in this batch, where the objects is stored.
+     */
     private class Position {
         private Batch batch;
         private long pos;

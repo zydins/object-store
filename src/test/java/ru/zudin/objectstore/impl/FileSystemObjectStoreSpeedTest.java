@@ -56,7 +56,6 @@ public class FileSystemObjectStoreSpeedTest {
 
     @Test
     public void test2RemoveNoDefragmentation() throws Exception {
-        //todo: rewrite
         FileSystemObjectStore store = new FileSystemObjectStore(ObjectStoreExample.getOrCreatePath(),
                 FileSystemObjectStore.BatchType.BASE_64, 4, 1, 1024 * 1024 * 500);
         try {
