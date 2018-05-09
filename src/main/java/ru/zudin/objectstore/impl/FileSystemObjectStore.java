@@ -34,11 +34,11 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     }
 
     public FileSystemObjectStore(String folder, BatchType batchType) {
-        this(folder, batchType, 4);
+        this(folder, batchType, 16);
     }
 
     public FileSystemObjectStore(String folder, BatchType batchType, int initBatchSize) {
-        this(folder, batchType, initBatchSize, 0.5, 1024 * 1024 * 500);
+        this(folder, batchType, initBatchSize, 0.33, 1024 * 1024 * 200);
     }
 
     public FileSystemObjectStore(String folder, BatchType batchType, int initBatchSize, double sizeLoadFactor, long fileSizeThreshold) {

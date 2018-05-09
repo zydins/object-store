@@ -67,7 +67,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
     public void test3BigObject() throws Exception {
         store.clear();
         HashMap<Integer, String> map = new HashMap<>();
-        for (int i = 0; i < 10000; i++) {
+        for (int i = 0; i < 1000000; i++) {
             map.put(i, "This is my string, hello " + i);
         }
         String guid = store.put(map);
