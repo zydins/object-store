@@ -44,7 +44,7 @@ public class FileSystemObjectStoreSpeedTest {
 
     @Test
     public void test1PutSmall() throws Exception {
-        store.clear();
+        store.deleteFiles();
         int count = 0;
         long avgSpeed = 0;
         CircularFifoQueue<Long> last = new CircularFifoQueue<>(100);
@@ -73,7 +73,7 @@ public class FileSystemObjectStoreSpeedTest {
         FileSystemObjectStore store = new FileSystemObjectStore(getOrCreatePath(),
                 FileSystemObjectStore.BatchType.BASE_64, 4, 1, 1024 * 1024 * 500);
         try {
-            store.clear();
+            store.deleteFiles();
             int count = 0;
             long avgSpeed = 0;
             CircularFifoQueue<Long> last = new CircularFifoQueue<>(100);
@@ -109,7 +109,7 @@ public class FileSystemObjectStoreSpeedTest {
 
     @Test
     public void test3RemoveDefragmentation() throws Exception {
-        store.clear();
+        store.deleteFiles();
         int count = 0;
         long avgSpeed = 0;
         CircularFifoQueue<Long> last = new CircularFifoQueue<>(100);
@@ -142,7 +142,7 @@ public class FileSystemObjectStoreSpeedTest {
 
     @Test
     public void test4PutGetRemove() throws Exception {
-        store.clear();
+        store.deleteFiles();
         int count = 0;
         long timeTotal = 0;
         String str = "Test string ";

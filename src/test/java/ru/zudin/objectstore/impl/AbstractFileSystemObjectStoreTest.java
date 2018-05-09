@@ -22,8 +22,12 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Before
     public void setUp() throws Exception {
+        store = buildStore();
+    }
+
+    private FileSystemObjectStore buildStore() {
         String path = FileSystemObjectStoreSpeedTest.getOrCreatePath();
-        store = new FileSystemObjectStore(path, getType());
+        return new FileSystemObjectStore(path, getType());
     }
 
     protected abstract FileSystemObjectStore.BatchType getType();
@@ -35,7 +39,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test1PutGet() throws Exception {
-        store.clear();
+        store.deleteFiles();
         String value = "Test string 1";
         String guid = store.put(value);
         Optional<Object> optional = store.get(guid);
@@ -47,7 +51,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test2PutsGet() throws Exception {
-        store.clear();
+        store.deleteFiles();
         Map<String, String> guids = new HashMap<>();
         for (int i = 0; i < 20; i++) {
             String value = "Hello wonkies " + i;
@@ -64,8 +68,8 @@ public abstract class AbstractFileSystemObjectStoreTest {
     }
 
     @Test
-    public void test3BigObject() throws Exception {
-        store.clear();
+    public void test3PutBigObject() throws Exception {
+        store.deleteFiles();
         HashMap<Integer, String> map = new HashMap<>();
         for (int i = 0; i < 1000000; i++) {
             map.put(i, "This is my string, hello " + i);
@@ -86,7 +90,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test4Remove() throws Exception {
-        store.clear();
+        store.deleteFiles();
         List<String> removed = new ArrayList<>();
         for (int i = 0; i < 20; i++) {
             String value = "Hello wonkies " + i;
@@ -106,7 +110,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test5RemoveGet() throws Exception {
-        store.clear();
+        store.deleteFiles();
         Multimap<Boolean, String> states = HashMultimap.create();
         for (int i = 0; i < 20; i++) {
             String value = "Hello wonkies " + i;
@@ -122,7 +126,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
         }
         for (String guid : states.get(true)) {
             Optional<Object> optional = store.get(guid);
-            assertTrue(!optional.isPresent());
+            assertFalse(optional.isPresent());
         }
         for (String guid : states.get(false)) {
             Optional<Object> optional = store.get(guid);
@@ -132,8 +136,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test6RemoveMultiple() throws Exception {
-//        store.clear();
-        Optional<Object> objectOptional = store.get("1c8d6c3c-9181-4e80-b73e-19f168313ca9");
+        store.deleteFiles();
         List<String> removed = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             String value = "Hello wonkies " + i;
@@ -145,13 +148,13 @@ public abstract class AbstractFileSystemObjectStoreTest {
         store.delete(removed);
         for (String guid : removed) {
             Optional<Object> optional = store.get(guid);
-            assertTrue(!optional.isPresent());
+            assertFalse(optional.isPresent());
         }
     }
 
     @Test
     public void test7Defragment() throws Exception {
-        store.clear();
+        store.deleteFiles();
         List<Batch> batches = store.getBatches();
         System.out.println("### Before insert ###");
         for (Batch batch : batches) {
@@ -183,7 +186,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test8DefragmentGet() throws Exception {
-        store.clear();
+        store.deleteFiles();
         List<String> toDelete = new ArrayList<>();
         List<String> existing = new ArrayList<>();
         for (int i = 0; i < 5000; i++) {
@@ -207,15 +210,15 @@ public abstract class AbstractFileSystemObjectStoreTest {
     }
 
     @Test
-    public void test9PutThreshold() throws Exception {
+    public void test9Rebalance() throws Exception {
         FileSystemObjectStore store = new FileSystemObjectStore(FileSystemObjectStoreSpeedTest.getOrCreatePath(),
                 getType(), 4, 0.33, 1024 * 128);
         try {
-            store.clear();
+            store.deleteFiles();
             int initSize = store.getBatches().size();
             Map<String, String> guids = new HashMap<>();
             String str = "Put me in store, please! I'm ";
-            for (int i = 1; i < 10000; i++) {
+            for (int i = 0; i < 10000; i++) {
                 String put = str + i;
                 String guid = store.put(put);
                 guids.put(guid, put);
@@ -229,6 +232,26 @@ public abstract class AbstractFileSystemObjectStoreTest {
             }
         } finally {
             store.close();
+        }
+    }
+
+    @Test
+    public void test10Scan() throws Exception {
+        store.deleteFiles();
+        String str = "Planet Earth is blue ";
+        Map<String, String> guids = new HashMap<>();
+        for (int i = 0; i < 1000; i++) {
+            String s = str + i;
+            String guid = store.put(s);
+            guids.put(guid, s);
+        }
+        FileSystemObjectStore newStore = buildStore();
+        for (String guid : guids.keySet()) {
+            Optional<Object> optional = newStore.get(guid);
+            assertTrue(optional.isPresent());
+            Object o = optional.get();
+            assertTrue(o instanceof String);
+            assertEquals(guids.get(guid), o);
         }
     }
 

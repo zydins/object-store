@@ -30,7 +30,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     private List<Batch> batches;
 
     public FileSystemObjectStore(String folder) {
-        this(folder, BatchType.BASE_64);
+        this(folder, BatchType.BINARY);
     }
 
     public FileSystemObjectStore(String folder, BatchType batchType) {
@@ -193,7 +193,7 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     }
 
     /* START TESTING */
-    protected void clear() {
+    protected void deleteFiles() {
         File[] files = getFiles();
         for (File file : files) {
             file.delete();
