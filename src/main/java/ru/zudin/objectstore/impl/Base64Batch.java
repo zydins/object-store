@@ -50,9 +50,7 @@ class Base64Batch extends AbstractFileBatch {
     }
 
     @Override
-    public Map<String, Long> defragment() throws IOException {
-        System.out.println("Defragmentation start for " + getName());
-        long start = System.currentTimeMillis();
+    protected Map<String, Long> innerDefragment() throws IOException {
         Map<String, Long> positions = new HashMap<>();
         File newFile = new File(file.getName() + ".new");
         PrintWriter clearWriter = new PrintWriter(newFile);
@@ -72,8 +70,6 @@ class Base64Batch extends AbstractFileBatch {
             printWriter.close();
             printWriter = null;
         }
-        long elapsed = System.currentTimeMillis() - start;
-        System.out.println(String.format("Defragmentation finish for %s, took %d millis", getName(), elapsed));
         return positions;
     }
 

@@ -132,7 +132,8 @@ public abstract class AbstractFileSystemObjectStoreTest {
 
     @Test
     public void test6RemoveMultiple() throws Exception {
-        store.clear();
+//        store.clear();
+        Optional<Object> objectOptional = store.get("1c8d6c3c-9181-4e80-b73e-19f168313ca9");
         List<String> removed = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             String value = "Hello wonkies " + i;

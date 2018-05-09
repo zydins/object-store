@@ -87,6 +87,19 @@ abstract class AbstractFileBatch implements Batch {
     }
 
     @Override
+    public Map<String, Long> defragment() throws IOException {
+        System.out.println("Defragmentation start for " + getName());
+        long start = System.currentTimeMillis();
+        Map<String, Long> positions = innerDefragment();
+        long elapsed = System.currentTimeMillis() - start;
+        System.out.println(String.format("Defragmentation finish for %s, took %d millis", getName(), elapsed));
+        removedSize = 0;
+        return positions;
+    }
+
+    protected abstract Map<String,Long> innerDefragment() throws FileNotFoundException, IOException;
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o.getClass().equals(getClass()))) return false;

@@ -4,6 +4,7 @@ import org.apache.commons.lang.BooleanUtils;
 import ru.zudin.objectstore.BatchIterator;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.HashMap;
@@ -45,26 +46,23 @@ public class BinaryBatch extends AbstractFileBatch {
     }
 
     @Override
-    public Map<String, Long> defragment() throws IOException {
-        System.out.println("Defragmentation start for " + getName());
-        long start = System.currentTimeMillis();
+    protected Map<String, Long> innerDefragment() throws FileNotFoundException, IOException {
         Map<String, Long> positions = new HashMap<>();
         File newFile = new File(file.getName() + ".new");
         RandomAccessFile newFileWriter = new RandomAccessFile(newFile, "rw");
         BatchIterator oldIterator = createIterator();
         while (oldIterator.hasNext()) {
-            long pos = newFile.length();
+            long pos = newFileWriter.getFilePointer();
             String guid = oldIterator.next();
             byte[] bytes = oldIterator.value();
             write(newFileWriter, guid, bytes);
             positions.put(guid, pos);
         }
+        newFileWriter.close();
         File tempOld = new File(file.getPath() + ".old");
         file.renameTo(tempOld);
         newFile.renameTo(file);
         tempOld.delete();
-        long elapsed = System.currentTimeMillis() - start;
-        System.out.println(String.format("Defragmentation finish for %s, took %d millis", getName(), elapsed));
         return positions;
     }
 

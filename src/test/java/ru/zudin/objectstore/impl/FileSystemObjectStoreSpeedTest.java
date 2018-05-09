@@ -117,7 +117,7 @@ public class FileSystemObjectStoreSpeedTest {
         List<String> guids = new ArrayList<>();
         for (int i = 1; i <= 50000; i++) {
             String guid = store.put(str);
-            if (Math.random() <= 0.4) {
+            if (Math.random() <= 0.8) {
                 guids.add(guid);
             }
         }
@@ -144,7 +144,6 @@ public class FileSystemObjectStoreSpeedTest {
     public void test4PutGetRemove() throws Exception {
         store.clear();
         int count = 0;
-//        long avgSpeed = 0;
         long timeTotal = 0;
         String str = "Test string ";
         List<String> guids = new ArrayList<>();
@@ -180,7 +179,7 @@ public class FileSystemObjectStoreSpeedTest {
             long elapsed = System.currentTimeMillis() - start;
             timeTotal += elapsed;
             count++;
-            if (i % 500 == 0) {
+            if (i % 1000 == 0) {
                 System.out.println(String.format("Count: %d: avg. time=%f, total=%d", count,
                         timeTotal / (double) count, timeTotal));
             }
