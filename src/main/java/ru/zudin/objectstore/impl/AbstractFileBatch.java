@@ -72,6 +72,10 @@ abstract class AbstractFileBatch implements Batch {
         return file.length();
     }
 
+    @Override
+    public long validSize() {
+        return fileSize() - removedSize;
+    }
 
     @Override
     public Optional<Map<String, Long>> defragmentIfNeeded() throws IOException {

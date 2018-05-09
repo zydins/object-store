@@ -16,7 +16,6 @@ import java.util.Map;
 class Base64Batch extends AbstractFileBatch {
 
     private PrintWriter printWriter;
-    protected int removedSize;
 
     public Base64Batch(String path, String name, double sizeLoadFactor, long fileSizeThreshold) {
         super(path, name, sizeLoadFactor, fileSizeThreshold);
@@ -48,11 +47,6 @@ class Base64Batch extends AbstractFileBatch {
     @Override
     public BatchIterator createIterator() {
         return new Base64BatchIterator();
-    }
-
-    @Override
-    public long validSize() {
-        return file.length() - removedSize;
     }
 
     @Override

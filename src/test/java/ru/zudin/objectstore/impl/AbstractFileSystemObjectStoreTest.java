@@ -185,10 +185,10 @@ public abstract class AbstractFileSystemObjectStoreTest {
         store.clear();
         List<String> toDelete = new ArrayList<>();
         List<String> existing = new ArrayList<>();
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 5000; i++) {
             String value = "Hello wonkies " + i;
             String guid = store.put(value);
-            if (Math.random() <= 0.6) {
+            if (Math.random() <= 0.9) {
                 toDelete.add(guid);
             } else {
                 existing.add(guid);

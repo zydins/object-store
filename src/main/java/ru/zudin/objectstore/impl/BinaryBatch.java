@@ -3,8 +3,10 @@ package ru.zudin.objectstore.impl;
 import org.apache.commons.lang.BooleanUtils;
 import ru.zudin.objectstore.BatchIterator;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -13,31 +15,28 @@ import java.util.Map;
  */
 public class BinaryBatch extends AbstractFileBatch {
 
-    private long removedSize;
-
     public BinaryBatch(String path, String name, double sizeLoadFactor, long fileSizeThreshold) {
         super(path, name, sizeLoadFactor, fileSizeThreshold);
     }
 
     @Override
     public long write(String guid, byte[] bytes) throws IOException {
+        RandomAccessFile accessFile = new RandomAccessFile(file, "rw");
         long pos = file.length();
+        accessFile.seek(pos);
+        write(accessFile, guid, bytes);
+        accessFile.close();
+        return pos;
+    }
+
+    private void write(RandomAccessFile accessFile, String guid, byte[] bytes) throws IOException {
         int keyLength = guid.length();
         int valueLength = bytes.length;
-        RandomAccessFile accessFile = new RandomAccessFile(file, "rw");
-        accessFile.seek(file.length());
         accessFile.writeByte(1);
         accessFile.writeInt(keyLength);
         accessFile.writeBytes(guid);
         accessFile.writeInt(valueLength);
         accessFile.write(bytes);
-        accessFile.close();
-        return pos;
-    }
-
-    @Override
-    public long validSize() {
-        return fileSize() - removedSize;
     }
 
     @Override
@@ -47,7 +46,26 @@ public class BinaryBatch extends AbstractFileBatch {
 
     @Override
     public Map<String, Long> defragment() throws IOException {
-        throw new UnsupportedOperationException();
+        System.out.println("Defragmentation start for " + getName());
+        long start = System.currentTimeMillis();
+        Map<String, Long> positions = new HashMap<>();
+        File newFile = new File(file.getName() + ".new");
+        RandomAccessFile newFileWriter = new RandomAccessFile(newFile, "rw");
+        BatchIterator oldIterator = createIterator();
+        while (oldIterator.hasNext()) {
+            long pos = newFile.length();
+            String guid = oldIterator.next();
+            byte[] bytes = oldIterator.value();
+            write(newFileWriter, guid, bytes);
+            positions.put(guid, pos);
+        }
+        File tempOld = new File(file.getPath() + ".old");
+        file.renameTo(tempOld);
+        newFile.renameTo(file);
+        tempOld.delete();
+        long elapsed = System.currentTimeMillis() - start;
+        System.out.println(String.format("Defragmentation finish for %s, took %d millis", getName(), elapsed));
+        return positions;
     }
 
     @Override
