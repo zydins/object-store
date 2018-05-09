@@ -2,9 +2,9 @@ package ru.zudin.objectstore.impl;
 
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang.SerializationUtils;
-import ru.zudin.objectstore.AppendOnlyObjectStore;
 import ru.zudin.objectstore.Batch;
 import ru.zudin.objectstore.BatchIterator;
+import ru.zudin.objectstore.ObjectStore;
 
 import java.io.Closeable;
 import java.io.File;
@@ -48,7 +48,7 @@ import java.util.stream.Collectors;
  * @author sergey
  * @since 07.05.18
  */
-public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
+public class FileSystemObjectStore implements ObjectStore, Closeable {
 
     private final String folder;
     private final int initBatchSize;
@@ -79,7 +79,10 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
      * @param fileSizeThreshold maximum size of file in bytes
      */
     public FileSystemObjectStore(String folder, BatchType batchType, int initBatchSize, double sizeLoadFactor, long fileSizeThreshold) {
-        //todo: check batch size
+        if (folder == null || batchType == null || initBatchSize < 1 || sizeLoadFactor < 0.0 || sizeLoadFactor > 1.0
+                || fileSizeThreshold < 0) {
+            throw new IllegalArgumentException();
+        }
         if (!folder.endsWith("/")) {
             folder += "/";
         }
@@ -273,7 +276,8 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
 
     /**
      * Selects batch for given guid. Now distribution of batches is evenly distributed.
-     * TODO: select batch based on its size
+     *
+     * In future there might be selection of batches based on its size.
      */
     private Batch selectBatch(String guid) {
         return batches.get(Math.abs(guid.hashCode()) % batches.size());

@@ -14,15 +14,17 @@ import java.util.List;
  * @author Sergey Zudin
  * @since 08.05.18.
  */
-public class FileSystemObjectStoreSpeedTest {
+public abstract class AbstractFSOSSpeedTest {
 
     private FileSystemObjectStore store;
 
     @Before
     public void setUp() throws Exception {
         String path = ObjectStoreExample.getOrCreatePath();
-        store = new FileSystemObjectStore(path, FileSystemObjectStore.BatchType.BINARY);
+        store = new FileSystemObjectStore(path, getType());
     }
+
+    protected abstract FileSystemObjectStore.BatchType getType();
 
     @After
     public void close() throws Exception {

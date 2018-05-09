@@ -11,7 +11,7 @@ import java.util.Optional;
  * @author sergey
  * @since 07.05.18
  */
-public interface AppendOnlyObjectStore {
+public interface ObjectStore {
 
     /**
      * Inserts a single serializable object to store.

@@ -35,7 +35,7 @@ public class ObjectStoreExample {
         return path;
     }
 
-    public static void test(AppendOnlyObjectStore store) throws Exception {
+    public static void test(ObjectStore store) throws Exception {
         int count = 0;
         long timeTotal = 0;
         String str = "Test string ";
