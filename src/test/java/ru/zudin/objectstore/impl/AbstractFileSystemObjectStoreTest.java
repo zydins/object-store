@@ -8,6 +8,7 @@ import org.junit.Before;
 import org.junit.Test;
 import ru.zudin.objectstore.Batch;
 
+import java.io.IOException;
 import java.util.*;
 
 import static org.junit.Assert.*;
@@ -71,7 +72,7 @@ public abstract class AbstractFileSystemObjectStoreTest {
     public void test3PutBigObject() throws Exception {
         store.deleteFiles();
         HashMap<Integer, String> map = new HashMap<>();
-        for (int i = 0; i < 1000000; i++) {
+        for (int i = 0; i < 500000; i++) {
             map.put(i, "This is my string, hello " + i);
         }
         String guid = store.put(map);
@@ -175,12 +176,14 @@ public abstract class AbstractFileSystemObjectStoreTest {
         store.delete(toDelete);
         System.out.println("### After delete ###");
         for (Batch batch : batches) {
-            long oldSize = batch.fileSize();
-            batch.defragment();
-            long newSize = batch.fileSize();
-            System.out.println(String.format("Batch %s, size after logical delete: %d, size after file delete: %d",
-                    batch.getName(), oldSize, newSize));
-            assertTrue(newSize < oldSize);
+            if (batch.fileSize() > batch.validSize()) {
+                long oldSize = batch.fileSize();
+                batch.defragment();
+                long newSize = batch.fileSize();
+                System.out.println(String.format("Batch %s, size after logical delete: %d, size after file delete: %d",
+                        batch.getName(), oldSize, newSize));
+                assertTrue(newSize < oldSize);
+            }
         }
     }
 
@@ -252,6 +255,22 @@ public abstract class AbstractFileSystemObjectStoreTest {
             Object o = optional.get();
             assertTrue(o instanceof String);
             assertEquals(guids.get(guid), o);
+        }
+    }
+
+    @Test
+    public void test11RemoveFile() throws Exception {
+        store.deleteFiles();
+        String str = "Str-str-string";
+        String guid = store.put(str);
+        store.deleteFiles();
+        try {
+            store.get(guid);
+            assertTrue(false);
+        } catch (IOException e) {
+            assertTrue(true);
+        } catch (Exception e) {
+            assertTrue(false);
         }
     }
 

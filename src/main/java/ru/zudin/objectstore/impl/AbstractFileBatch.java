@@ -40,18 +40,23 @@ abstract class AbstractFileBatch implements Batch {
     public Optional<byte[]> get(long pos) throws IOException {
         BatchIterator iterator = createIterator();
         iterator.setStartPos(pos);
-        iterator.next();
-        byte[] value = iterator.value();
+        byte[] value = null;
+        if (iterator.hasNext()) {
+            iterator.next();
+            value = iterator.value();
+        }
         iterator.close();
-        return Optional.of(value);
+        return Optional.ofNullable(value);
     }
 
     @Override
     public void delete(long pos) throws IOException {
         BatchIterator iterator = createIterator();
         iterator.setStartPos(pos);
-        iterator.next();
-        iterator.remove();
+        if (iterator.hasNext()) {
+            iterator.next();
+            iterator.remove();
+        }
         iterator.close();
     }
 
@@ -97,6 +102,16 @@ abstract class AbstractFileBatch implements Batch {
         return positions;
     }
 
+    @Override
+    public BatchIterator createIterator() throws IOException {
+        if (!file.exists()) {
+            throw new IOException(String.format("File '%s' is not exists", file.getName()));
+        }
+        return innerCreateIterator();
+    }
+
+    protected abstract BatchIterator innerCreateIterator();
+
     protected abstract Map<String,Long> innerDefragment() throws FileNotFoundException, IOException;
 
     @Override
@@ -118,12 +133,6 @@ abstract class AbstractFileBatch implements Batch {
         double fileSize = (double) fileSize();
         double proportion = validSize() / fileSize;
         return 1 - proportion >= sizeLoadFactor || (fileSize > fileSizeThreshold && 1 - validSize() != 0);
-//        if (proportion < sizeLoadFactor) {
-//            double avgSize = removedSize / (double) removedNumber; //todo: correct?
-//            double totalNumber = fileSize / avgSize; //todo: if total size is small - ignore?
-//            return removedNumber / totalNumber >= 0.33;
-//        }
-//        return true;
     }
 
     protected abstract class AbstractFileBatchIterator implements BatchIterator {
@@ -133,12 +142,17 @@ abstract class AbstractFileBatch implements Batch {
         private long pos;
         private byte[] value;
         private Optional<Boolean> hasNext;
+        private boolean wasNext;
+        private boolean wasRemove;
 
         public AbstractFileBatchIterator() {
             this.randomAccessFile = null;
             this.seek = 0;
+            this.pos = 0;
             this.guid = null;
             this.hasNext = Optional.empty();
+            wasNext = false;
+            wasRemove = false;
         }
 
         private void init() {
@@ -204,6 +218,8 @@ abstract class AbstractFileBatch implements Batch {
                     }
                 }
                 value = null;
+                wasNext = true;
+                wasRemove = false;
                 return guid;
             } catch (IOException e) {
                 throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
@@ -212,12 +228,16 @@ abstract class AbstractFileBatch implements Batch {
 
         @Override
         public void remove() {
+            if (!wasNext || wasRemove) {
+                throw new IllegalStateException("Next() method has not yet been called");
+            }
             try {
                 long prev = randomAccessFile.getFilePointer();
                 randomAccessFile.seek(pos);
                 markDeleted(randomAccessFile);
                 removedSize += updateRemovedSize(guid, seek);
                 randomAccessFile.seek(prev);
+                wasRemove = true;
             } catch (IOException e) {
                 throw new IllegalStateException("Cannot read file: '" + file.getPath() + "");
             }
@@ -257,7 +277,9 @@ abstract class AbstractFileBatch implements Batch {
 
         @Override
         public void close() throws IOException {
-            randomAccessFile.close();
+            if (randomAccessFile != null) {
+                randomAccessFile.close();
+            }
         }
 
     }

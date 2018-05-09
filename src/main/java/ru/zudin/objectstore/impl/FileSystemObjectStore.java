@@ -206,14 +206,6 @@ public class FileSystemObjectStore implements AppendOnlyObjectStore, Closeable {
     }
     /* END TESTING */
 
-    private String encodeValue(Serializable object) {
-        return Base64.getEncoder().encodeToString(SerializationUtils.serialize(object));
-    }
-
-    private Object decodeValue(String value) {
-        return SerializationUtils.deserialize(Base64.getDecoder().decode(value));
-    }
-
     private String generateGuid() {
         while (true) {
             String hex = UUID.randomUUID().toString();

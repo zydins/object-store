@@ -45,7 +45,7 @@ class Base64Batch extends AbstractFileBatch {
     }
 
     @Override
-    public BatchIterator createIterator() {
+    protected BatchIterator innerCreateIterator() {
         return new Base64BatchIterator();
     }
 

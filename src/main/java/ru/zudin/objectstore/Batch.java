@@ -26,7 +26,7 @@ public interface Batch extends Closeable {
 
     Optional<Map<String, Long>> defragmentIfNeeded() throws IOException;
 
-    BatchIterator createIterator();
+    BatchIterator createIterator() throws IOException;
 
     long fileSize();
 

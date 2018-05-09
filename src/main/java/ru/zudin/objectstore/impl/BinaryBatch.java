@@ -41,7 +41,7 @@ public class BinaryBatch extends AbstractFileBatch {
     }
 
     @Override
-    public BatchIterator createIterator() {
+    protected BatchIterator innerCreateIterator() {
         return new BinaryBatchIterator();
     }
 
