@@ -83,8 +83,8 @@ public class FileSystemObjectStore implements ObjectStore, Closeable {
                 || fileSizeThreshold < 0) {
             throw new IllegalArgumentException();
         }
-        if (!folder.endsWith("/")) {
-            folder += "/";
+        if (!folder.endsWith(File.separator)) {
+            folder += File.separator;
         }
         this.folder = folder;
         this.batchType = batchType;

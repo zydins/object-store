@@ -24,10 +24,10 @@ public class ObjectStoreExample {
 
     public static String getOrCreatePath() {
         String path = System.getProperty("user.dir");
-        if (!path.endsWith("/")) {
-            path += "/";
+        if (!path.endsWith(File.separator)) {
+            path += File.separator;
         }
-        path += "files/";
+        path += "files" + File.separator;
         File filesPath = new File(path);
         if (!filesPath.exists()) {
             filesPath.mkdir();
