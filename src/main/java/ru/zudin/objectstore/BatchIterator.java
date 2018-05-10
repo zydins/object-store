@@ -40,7 +40,7 @@ public interface BatchIterator extends Iterator<String>, Closeable {
     long pos();
 
     /**
-     * Set start position if file
+     * Set start position of file
      */
     void setStartPos(long pos) throws IOException;
 

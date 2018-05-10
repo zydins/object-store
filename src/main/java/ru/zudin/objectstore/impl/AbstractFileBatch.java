@@ -112,6 +112,9 @@ abstract class AbstractFileBatch implements Batch {
      */
     private boolean isDefragmentationNeeded() {
         double fileSize = (double) fileSize();
+        if (fileSize < fileSizeThreshold * 0.1) {
+            return false;
+        }
         double proportion = validSize() / fileSize;
         return 1 - proportion >= sizeLoadFactor || (fileSize > fileSizeThreshold && 1 - validSize() != 0);
     }

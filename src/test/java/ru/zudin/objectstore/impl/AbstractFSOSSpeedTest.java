@@ -2,13 +2,12 @@ package ru.zudin.objectstore.impl;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import ru.zudin.objectstore.ObjectStoreExample;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * @author Sergey Zudin
@@ -132,6 +131,59 @@ public abstract class AbstractFSOSSpeedTest {
     public void test4PutGetRemove() throws Exception {
         store.deleteFiles();
         ObjectStoreExample.test(store);
+    }
+
+    @Test
+    public void test5Workflow() throws Exception {
+        store.deleteFiles();
+        Random random = new Random();
+        Map<String, String> guids = new HashMap<>();
+        String str = "Lucy in the sky with %d diamonds";
+        String format = getFormat(str, 0);
+        guids.put(store.put(format), format);
+        int inserted = 0;
+        int deleted = 0;
+        int gets = 0;
+        long start = System.currentTimeMillis();
+        for (int i = 1; i < 100000; i++) {
+            int nextInt = random.nextInt(100);
+            if (nextInt % 10 == 0) {
+                format = getFormat(str, i);
+                String guid = store.put(format);
+                guids.put(guid, format);
+                inserted++;
+            } else if (nextInt == 55) {
+                String guid = getRandomGuid(guids, random);
+                store.delete(guid);
+                Optional<Object> optional = store.get(guid);
+                Assert.assertFalse(optional.isPresent());
+                guids.remove(guid);
+                deleted++;
+            } else if (!guids.isEmpty()) {
+                String guid = getRandomGuid(guids, random);
+                Optional<Object> optional = store.get(guid);
+                Assert.assertTrue(optional.isPresent());
+                Assert.assertEquals(guids.get(guid), optional.get());
+                gets++;
+            }
+            if (i % 1000 == 0) {
+                System.out.println(String.format("%d: Inserted=%d, Deleted=%d, Gets=%d", i, inserted, deleted, gets));
+            }
+        }
+        long elapsed = System.currentTimeMillis() - start;
+        System.out.println("All good, took " + elapsed);
+    }
+
+    private String getRandomGuid(Map<String, String> guids, Random random) {
+        Set<String> strings = guids.keySet();
+        return strings.stream()
+                .skip(random.nextInt(strings.size()))
+                .findFirst()
+                .get();
+    }
+
+    private String getFormat(String str, int i) {
+        return String.format(str, i);
     }
 
 }
