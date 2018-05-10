@@ -16,6 +16,7 @@ public class ObjectStoreExample {
     public static void main(String... args) throws Exception {
         FileSystemObjectStore store = new FileSystemObjectStore(getOrCreatePath(), FileSystemObjectStore.BatchType.BINARY);
         try {
+            store.deleteFiles();
             test(store);
         } finally {
             store.close();

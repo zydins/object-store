@@ -45,6 +45,12 @@ import java.util.stream.Collectors;
  * - fileSizeThreshold (if size of file batch became bigger than given parameter, than
  * re-balance of active objects in batches is executed)
  *
+ * After first call of any method, 'scan()' method is executed. This method scans working
+ * directory for existing batch files and re-build index from them. It is also called
+ * force defragmentation of this batches to ensure correct meta-information in batch,
+ * such as size of removed entities. This can take quite a long time on large files,
+ * so this field is also a direction for future work.
+ *
  * @author sergey
  * @since 07.05.18
  */
@@ -252,7 +258,7 @@ public class FileSystemObjectStore implements ObjectStore, Closeable {
     }
 
     /* START TESTING */
-    protected void deleteFiles() {
+    public void deleteFiles() {
         File[] files = getFiles();
         for (File file : files) {
             file.delete();
@@ -307,9 +313,14 @@ public class FileSystemObjectStore implements ObjectStore, Closeable {
                     continue;
                 }
                 Batch batch = getBatch(fileName);
-                Map<String, Long> defragment = batch.defragment();
-                for (String guid : defragment.keySet()) {
-                    index.put(guid, new Position(batch, defragment.get(guid)));
+                try {
+                    Map<String, Long> defragment = batch.defragment();
+                    for (String guid : defragment.keySet()) {
+                        index.put(guid, new Position(batch, defragment.get(guid)));
+                    }
+                } catch (IOException | IllegalStateException e) {
+                    System.out.println(String.format("Found damaged file '%s', archive it", fileName));
+                    file.renameTo(new File(file.getName() + ".broken"));
                 }
                 batches.add(batch);
             }
